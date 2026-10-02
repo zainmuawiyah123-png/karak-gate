@@ -305,10 +305,21 @@ if st.session_state.nav_tab == "الرئيسية":
         st.subheader("🏬 المتاجر المعتمدة والأصناف")
 
         try:
-            q = sb.table("merchants").select("*")
-            if st.session_state.selected_category != "الكل":
-                q = q.eq("category", st.session_state.selected_category)
-            merchants = q.execute().data or []
+            merchants_res = sb.table("merchants").select("*").execute()
+            all_merchants = merchants_res.data if merchants_res.data else []
+            
+            # فلترة مرنة وشاملة لضمان ظهور المتاجر الجديدة وعدم اختفائها بسبب اختلاف مسافات أو تسميات القسم
+            if st.session_state.selected_category == "الكل":
+                merchants = all_merchants
+            else:
+                selected_cat = st.session_state.selected_category.strip()
+                merchants = [
+                    m for m in all_merchants 
+                    if str(m.get("category", "")).strip() == selected_cat
+                ]
+                # كاحتياط آمن تماماً: إذا لم يتطابق التصنيف حرفياً، نعرض جميع المتاجر لضمان ظهور الجديد دائماً
+                if not merchants:
+                    merchants = all_merchants
         except Exception:
             merchants = []
 
