@@ -263,7 +263,7 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    search = st.text_input("🔍 ابحث عن متجر أو صنف في الكرك...", "")
+    search = st.text_input("🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...", "")
 
     st.subheader("📁 الأقسام الرئيسية")
     
@@ -304,24 +304,44 @@ if st.session_state.nav_tab == "الرئيسية":
             merchants_res = sb.table("merchants").select("*").execute()
             all_merchants = merchants_res.data if merchants_res.data else []
             
-            if st.session_state.selected_category == "الكل":
-                merchants = all_merchants
-            else:
-                selected_cat = st.session_state.selected_category.strip()
-                # فلترة دقيقة وصحيحة: جلب فقط المتاجر التي تطابق القسم المحدد حصراً دون جلب أقسام أخرى
-                merchants = [
-                    m for m in all_merchants 
-                    if str(m.get("category", "")).strip() == selected_cat
-                ]
+            # جلب كافة الأصناف مسبقاً لضمان سرعة البحث الشامل
+            products_res = sb.table("products").select("*").execute()
+            all_products = products_res.data if products_res.data else []
         except Exception:
-            merchants = []
+            all_merchants = []
+            all_products = []
 
+        # 1. فلترة المتاجر حسب القسم المحدد
+        if st.session_state.selected_category == "الكل":
+            filtered_merchants = all_merchants
+        else:
+            selected_cat = st.session_state.selected_category.strip()
+            filtered_merchants = [
+                m for m in all_merchants 
+                if str(m.get("category", "")).strip() == selected_cat
+            ]
+
+        # 2. البحث السريع الشامل (اسم المتجر، التصنيف، أو اسم الصنف)
         if search:
             s = search.lower().strip()
-            merchants = [m for m in merchants if s in str(m.get("name") or "").lower() or s in str(m.get("category") or "").lower()]
+            # معرفة أسماء المتاجر التي تحتوي على الصنف المطابق لبحث المستخدم
+            matching_merchants_by_product = set()
+            for p in all_products:
+                if s in str(p.get("item_name") or "").lower():
+                    matching_merchants_by_product.add(p.get("merchant_name"))
+
+            # المتجر يظهر إذا تطابق اسمه أو تصنيفه أو أحد أصنافه مع بحث المستخدم
+            merchants = []
+            for m in filtered_merchants:
+                mname = str(m.get("name") or "").lower()
+                mcat = str(m.get("category") or "").lower()
+                if s in mname or s in mcat or m.get("name") in matching_merchants_by_product:
+                    merchants.append(m)
+        else:
+            merchants = filtered_merchants
 
         if not merchants:
-            st.info("لا توجد متاجر مضافة حالياً في هذا القسم.")
+            st.info("لا توجد متاجر أو أصناف مطابقة للبحث أو مضافة حالياً في هذا القسم.")
 
         for mi, m in enumerate(merchants):
             mname = m.get("name", "متجر")
@@ -339,10 +359,13 @@ if st.session_state.nav_tab == "الرئيسية":
                 if mlink:
                     st.markdown(f'<a href="{mlink}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
-            try:
-                products = sb.table("products").select("*").eq("merchant_name", mname).execute().data or []
-            except Exception:
-                products = []
+            # تصفية أصناف هذا المتجر (إذا كان هناك بحث نشط، نعرض الأصناف المطابقة للبحث أو الكل إذا تطابق اسم المتجر)
+            products = [p for p in all_products if p.get("merchant_name") == mname]
+            if search:
+                s = search.lower().strip()
+                # إذا كان بحث المستخدم يطابق اسم المتجر، نعرض كل أصنافه، وإلا نعرض الأصناف التي تطابق نص البحث فقط
+                if s not in mname.lower() and s not in str(m.get("category", "")).lower():
+                    products = [p for p in products if s in str(p.get("item_name") or "").lower()]
 
             if products:
                 st.write("📋 **الأصناف المتوفرة:**")
@@ -370,7 +393,7 @@ if st.session_state.nav_tab == "الرئيسية":
                             })
                             st.toast(f"تمت إضافة {item_name} إلى السلة!")
             else:
-                st.info("لا توجد أصناف مضافة حالياً من هذا المتجر.")
+                st.info("لا توجد أصناف مطابقة للبحث من هذا المتجر.")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
