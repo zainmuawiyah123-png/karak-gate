@@ -639,23 +639,21 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل (مبسط ومستقر تماماً)
+# 3. الحساب وعنوان التوصيل مع ربط الخريطة الفعّال
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
         """
         <div class="kg-header">
             <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك، تغيير رقم الهاتف أو المنطقة، أو مسح البيانات بكل سهولة</div>
+            <div class="kg-header-sub">قم بتحديث معلوماتك، تحديد موقعك الجغرافي برابط خرائط جوجل، أو إدارة حسابك بكل سهولة</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # حقول إدخال مرتبطة مباشرة بمتغيرات الـ Session State لضمان القراءة والفورية
     st.session_state.customer_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
     
-    # حفظ الرقم القديم للمقارنة في حال تم تغييره
     old_phone_val = st.session_state.phone
     st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
     
@@ -663,17 +661,29 @@ elif st.session_state.nav_tab == "الحساب":
     st.session_state.customer_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي):", value=st.session_state.customer_address)
     st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
 
-    st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
+    st.markdown("📍 **الموقع الجغرافي (ربط رابط خرائط جوجل الفعّال):**")
+    st.markdown("<p style='font-size:12px; color:#64748B; margin-top:-5px;'>يُرجى إدخال رابط فعال من خرائط جوجل لموقعك بدقة لضمان وصول السائق للمنطقة فوراً.</p>", unsafe_allow_html=True)
+
     st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
 
-    if st.button("🌐 تحديد موقعي الحالي تلقائياً (المرج)"):
-        st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-        st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح!")
-        st.rerun()
+    map_cols = st.columns(2)
+    with map_cols[0]:
+        if st.button("🌐 فتح خرائط جوجل لنسخ الرابط"):
+            st.markdown('<meta http-equiv="refresh" content="0;url=https://maps.google.com">', unsafe_allow_html=True)
+            st.info("💡 تم توجيهك لخرائط جوجل. ابحث عن موقعك، انسخ رابط المشاركة (Share Link)، ثم الصقه في الحقل أعلاه.")
+    with map_cols[1]:
+        if st.button("📍 تعيين موقع افتراضي (الكرك - المرج)"):
+            st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+            st.success("✅ تم تعيين موقع المرج - الكرك افتراضياً بنجاح!")
+            st.rerun()
+
+    # معاينة الرابط الفعّال إذا كان موجوداً
+    if st.session_state.customer_map_link:
+        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # الأزرار الثلاثة المستقلة والواضحة تماماً
+    # أزرار الإجراءات المستقلة
     col_b1, col_b2, col_b3 = st.columns(3)
 
     with col_b1:
@@ -687,14 +697,13 @@ elif st.session_state.nav_tab == "الحساب":
                     },
                     on_conflict="phone"
                 ).execute()
-                st.success("🎉 تم حفظ وتحديث بياناتك بنجاح!")
+                st.success("🎉 تم حفظ وتحديث بياناتك ورابط الموقع بنجاح!")
             except Exception as e:
                 st.error(f"خطأ أثناء الحفظ: {e}")
 
     with col_b2:
         if st.button("🔄 تغيير الرقم / الانتقال لمنطقة أخرى", use_container_width=True):
             try:
-                # إذا تغير رقم الهاتف، نقوم بحذف السجل القديم أولاً لمنع ازدواجية السجلات
                 if old_phone_val != st.session_state.phone:
                     sb.table("customers").delete().eq("phone", old_phone_val).execute()
 
@@ -706,7 +715,7 @@ elif st.session_state.nav_tab == "الحساب":
                     },
                     on_conflict="phone"
                 ).execute()
-                st.success("🎉 تم اعتماد الرقم الجديد ومنطقتك المحدثة بنجاح!")
+                st.success("🎉 تم اعتماد الرقم الجديد والمنطقة ورابط الخريطة بنجاح!")
             except Exception as e:
                 st.error(f"خطأ أثناء تحديث رقم الهاتف أو المنطقة: {e}")
 
@@ -718,6 +727,7 @@ elif st.session_state.nav_tab == "الحساب":
                 st.session_state.customer_address = "الكرك - المرج"
                 st.session_state.delivery_notes = ""
                 st.session_state.customer_email = ""
+                st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
                 st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
                 st.rerun()
             except Exception as e:
