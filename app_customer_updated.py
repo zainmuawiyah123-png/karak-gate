@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث (خلفية جمالية وتصاميم بارزة للأقسام الكبيرة)
+# CSS المحدث (تصميم متناسق للأقسام بدون أزرار مزدوجة)
 # ============================================================
 st.markdown(
     """
@@ -66,14 +66,15 @@ h1, h2, h3, h4, h5, h6, p, label, span {
 div[data-testid="column"] .stButton > button {
     background: #FF5722 !important;
     color: #FFFFFF !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     border: 0 !important;
     font-weight: bold !important;
-    font-size: 11px !important;
-    padding: 2px 4px !important;
-    min-height: 28px !important;
-    margin: 0 auto !important;
+    font-size: 13px !important;
+    padding: 6px 12px !important;
+    min-height: 36px !important;
+    margin: 4px auto 0 auto !important;
     display: block !important;
+    width: 100% !important;
 }
 .kg-header {
     background: linear-gradient(135deg, #E64A19, #FF7043);
@@ -266,26 +267,27 @@ if st.session_state.nav_tab == "الرئيسية":
 
     st.subheader("📁 الأقسام الرئيسية")
     
-    # عرض الأقسام بشكل شبكي أفقي بصور أكبر وبأناقة تامة لكل الأقسام
+    # عرض الأقسام بخلفية بيضاء موحدة للجميع مع تمييز القسم المختار بإطار برتقالي وتصميم أنيق متناسق
     cols = st.columns(4)
     for i, cat in enumerate(categories):
         c_name = cat["name"]
         c_img = cat["image"]
         is_sel = (st.session_state.selected_category == c_name)
-        border_color = "#E64A19" if is_sel else "#CBD5E1"
-        bg_color = "#FFF3EE" if is_sel else "#FFFFFF"
+        border_color = "#E64A19" if is_sel else "#E2E8F0"
+        shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.15);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
         
         with cols[i % 4]:
             st.markdown(
                 f"""
-                <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.04);">
-                    <img src="{c_img}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%; margin: 0 auto 8px auto; display: block; border: 2px solid white; box-shadow: 0 3px 6px rgba(0,0,0,0.15);">
-                    <div style="font-weight: 800; font-size: 12px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                <div style="background: #FFFFFF; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 8px; text-align: center; margin-bottom: 8px; {shadow_style}">
+                    <img src="{c_img}" style="width: 65px; height: 65px; object-fit: cover; border-radius: 50%; margin: 0 auto 8px auto; display: block; border: 2px solid #F1F5F9; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+                    <div style="font-weight: 800; font-size: 13px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; margin-bottom: 8px;">{c_name}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-            if st.button(f"اختر", key=f"cat_card_{i}", use_container_width=True):
+            btn_label = f"✓ {c_name}" if is_sel else f"اختر {c_name}"
+            if st.button(btn_label, key=f"cat_card_{i}", use_container_width=True):
                 st.session_state.selected_category = c_name
                 st.query_params["cat"] = c_name
                 st.rerun()
@@ -351,7 +353,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     p_col1, p_col2, p_col3 = st.columns([1, 4, 2])
                     
                     with p_col1:
-                        display_image(p.get("image_path"), width=40, fallback="🍽️️")
+                        display_image(p.get("image_path"), width=40, fallback="🍽")
                     
                     with p_col2:
                         st.markdown(f"**{item_name}**")
@@ -525,7 +527,6 @@ elif st.session_state.nav_tab == "الحساب":
 
     st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
     
-    # ميزة أخذ إحداثيات الموقع أو رابط خرائط جوجل مباشرة
     map_input_method = st.radio("طريقة تحديد الموقع:", ["إدخال رابط خرائط جوجل يدوياً", "تحديد الإحداثيات الجغرافية تلقائياً (GPS)"])
     
     if map_input_method == "إدخال رابط خرائط جوجل يدوياً":
@@ -533,7 +534,6 @@ elif st.session_state.nav_tab == "الحساب":
     else:
         st.info("💡 اضغط على الزر أدناه لتحديد موقعك الحالي في الكرك بدقة:")
         if st.button("🌐 تحديد موقعي الحالي تلقائياً"):
-            # إحداثيات افتراضية دقيقة لمنطقة المرج في الكرك كإحداثيات جغرافية فعلية
             st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
             st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح (الكرك - المرج)!")
 
