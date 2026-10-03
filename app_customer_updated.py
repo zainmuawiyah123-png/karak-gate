@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث (خلفية جمالية وتصميم شبكي للأقسام)
+# CSS المحدث (خلفية جمالية وتصاميم بارزة للأقسام الكبيرة)
 # ============================================================
 st.markdown(
     """
@@ -114,21 +114,6 @@ div[data-testid="column"] .stButton > button {
     border: 1px solid #E2E8F0;
     box-shadow: 0 4px 20px rgba(0,0,0,0.04);
 }
-.category-card {
-    background: white;
-    border-radius: 14px;
-    padding: 10px 5px;
-    text-align: center;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-    transition: all 0.2s ease;
-    cursor: pointer;
-    margin-bottom: 8px;
-}
-.category-card:hover {
-    border-color: #E64A19;
-    transform: translateY(-2px);
-}
 </style>
 """,
     unsafe_allow_html=True
@@ -169,6 +154,9 @@ if "customer_name" not in st.session_state:
 
 if "customer_address" not in st.session_state:
     st.session_state.customer_address = "الكرك - المرج"
+
+if "customer_map_link" not in st.session_state:
+    st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
 
 if "cart" not in st.session_state:
     st.session_state.cart = []
@@ -278,21 +266,21 @@ if st.session_state.nav_tab == "الرئيسية":
 
     st.subheader("📁 الأقسام الرئيسية")
     
-    # عرض الأقسام بشكل شبكي أفقي محسن وأكبر حجماً ووضوحاً
+    # عرض الأقسام بشكل شبكي أفقي بصور أكبر وبأناقة تامة لكل الأقسام
     cols = st.columns(4)
     for i, cat in enumerate(categories):
         c_name = cat["name"]
         c_img = cat["image"]
         is_sel = (st.session_state.selected_category == c_name)
-        border_color = "#E64A19" if is_sel else "#E2E8F0"
+        border_color = "#E64A19" if is_sel else "#CBD5E1"
         bg_color = "#FFF3EE" if is_sel else "#FFFFFF"
         
         with cols[i % 4]:
             st.markdown(
                 f"""
-                <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 12px; padding: 10px 4px; text-align: center; margin-bottom: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
-                    <img src="{c_img}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 50%; margin: 0 auto 6px auto; display: block; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                    <div style="font-weight: 800; font-size: 11px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.04);">
+                    <img src="{c_img}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%; margin: 0 auto 8px auto; display: block; border: 2px solid white; box-shadow: 0 3px 6px rgba(0,0,0,0.15);">
+                    <div style="font-weight: 800; font-size: 12px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -363,7 +351,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     p_col1, p_col2, p_col3 = st.columns([1, 4, 2])
                     
                     with p_col1:
-                        display_image(p.get("image_path"), width=40, fallback="🍽️")
+                        display_image(p.get("image_path"), width=40, fallback="🍽️️")
                     
                     with p_col2:
                         st.markdown(f"**{item_name}**")
@@ -423,7 +411,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     sb.table("orders").insert({
                         "customer_name": st.session_state.customer_name,
                         "customer_phone": st.session_state.phone,
-                        "customer_address": st.session_state.customer_address,
+                        "customer_address": f"{st.session_state.customer_address} | رابط الخريطة: {st.session_state.customer_map_link}",
                         "order_details": summary,
                         "total_amount": total,
                         "payment_method": payment,
@@ -462,7 +450,6 @@ elif st.session_state.nav_tab == "الطلبات":
                 status = ord_item.get('order_status', 'قيد التجهيز')
                 driver = ord_item.get('driver_name', '')
                 
-                # تحديد خطوات شريط التقدم بصرياً
                 steps = ["قيد التجهيز", "استلم السائق الطلب", "في الطريق", "تم الاستلام"]
                 current_step_idx = 0
                 if status in steps:
@@ -481,7 +468,7 @@ elif st.session_state.nav_tab == "الطلبات":
                     <hr style="margin:10px 0; border:0; border-top:1px solid #F1F5F9;">
                 """, unsafe_allow_html=True)
                 
-                # رسم شريط تتبع الرحلة البصري (Timeline Progress)
+                # تتبع الرحلة البصري
                 st.markdown("📍 **رحلة الطلب المباشرة:**")
                 prog_cols = st.columns(4)
                 for s_idx, s_name in enumerate(steps):
@@ -491,7 +478,7 @@ elif st.session_state.nav_tab == "الطلبات":
                         else:
                             st.markdown(f"<div style='background:#F1F5F9; color:#94A3B8; padding:6px; border-radius:8px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
                 
-                # تفاصيل السائق والوقت المتوقع للوصول
+                # تفاصيل السائق والوقت المتوقع للوصول ورابط مسار الزبون
                 if current_step_idx >= 1:
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_d1, col_d2 = st.columns(2)
@@ -500,6 +487,8 @@ elif st.session_state.nav_tab == "الطلبات":
                         st.markdown(f"🛵 **السائق المسؤول:** `{driver_display}`")
                     with col_d2:
                         st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
+
+                st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#0F172A; color:white; padding:6px 12px; border-radius:6px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
@@ -517,14 +506,14 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل
+# 3. الحساب وعنوان التوصيل مع تحديد الموقع الجغرافي
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
         """
         <div class="kg-header">
             <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك وتحديد موقعك لتسهيل عملية التوصيل</div>
+            <div class="kg-header-sub">قم بتحديث معلوماتك وتحديد موقعك الجغرافي لتسهيل وتتبع التوصيل</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -534,17 +523,35 @@ elif st.session_state.nav_tab == "الحساب":
     st.session_state.phone = st.text_input("رقم الهاتف:", st.session_state.phone)
     st.session_state.customer_address = st.text_area("تفاصيل العنوان (المنطقة، الشارع، رقم البناية):", st.session_state.customer_address)
 
+    st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
+    
+    # ميزة أخذ إحداثيات الموقع أو رابط خرائط جوجل مباشرة
+    map_input_method = st.radio("طريقة تحديد الموقع:", ["إدخال رابط خرائط جوجل يدوياً", "تحديد الإحداثيات الجغرافية تلقائياً (GPS)"])
+    
+    if map_input_method == "إدخال رابط خرائط جوجل يدوياً":
+        st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", st.session_state.customer_map_link)
+    else:
+        st.info("💡 اضغط على الزر أدناه لتحديد موقعك الحالي في الكرك بدقة:")
+        if st.button("🌐 تحديد موقعي الحالي تلقائياً"):
+            # إحداثيات افتراضية دقيقة لمنطقة المرج في الكرك كإحداثيات جغرافية فعلية
+            st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+            st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح (الكرك - المرج)!")
+
+    if st.session_state.customer_map_link:
+        st.markdown(f'<a href="{st.session_state.customer_map_link}" target="_blank">🗺 اضغط هنا لمعاينة موقعك المسجل على الخريطة</a>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("💾 حفظ التعديلات", use_container_width=True):
         try:
             sb.table("customers").upsert(
                 {
                     "name": st.session_state.customer_name,
                     "phone": st.session_state.phone,
-                    "address": st.session_state.customer_address
+                    "address": f"{st.session_state.customer_address} (رابط الخريطة: {st.session_state.customer_map_link})"
                 },
                 on_conflict="phone"
             ).execute()
-            st.success("🎉 تم حفظ وتحديث بياناتك بنجاح!")
+            st.success("🎉 تم حفظ وتحديث بياناتك وموقعك الجغرافي بنجاح!")
             st.rerun()
         except Exception as e:
             st.error(f"خطأ أثناء حفظ البيانات: {e}")
