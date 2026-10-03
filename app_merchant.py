@@ -152,13 +152,13 @@ if st.session_state.merchant_step == "login_or_register":
   if choice == "تسجيل دخول متجر مسجل مسبقاً":
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, category, location, status, phone FROM merchants")
+    cursor.execute("SELECT id, name, category, location, status, phone FROM merchants WHERE status = 'معتمد'")
     all_m = cursor.fetchall()
     conn.close()
 
     if not all_m:
       st.info(
-          "لا توجد أي متاجر مسجلة حالياً. يرجى اختيار 'تسجيل متجر جديد لأول مرة'."
+          "لا توجد أي متاجر معتمدة حالياً. يرجى اختيار 'تسجيل متجر جديد لأول مرة'."
       )
     else:
       m_options = {f"{m[1]} ({m[2]} - هاتف: {m[5]})": m for m in all_m}
@@ -183,7 +183,7 @@ if st.session_state.merchant_step == "login_or_register":
             conn = get_db()
             cur_q = conn.cursor()
             cur_q.execute(
-                "SELECT id, name, category, location, status, phone FROM merchants WHERE phone = ?",
+                "SELECT id, name, category, location, status, phone FROM merchants WHERE phone = ? AND status = 'معتمد'",
                 (quick_phone_check,),
             )
             found_m = cur_q.fetchone()
@@ -197,8 +197,7 @@ if st.session_state.merchant_step == "login_or_register":
               st.rerun()
             else:
               st.warning(
-                  "⚠️ رقم الهاتف غير مسجل مسبقاً لدى الإدارة. يرجى الانتقال لخيار"
-                  " 'تسجيل متجر جديد لأول مرة' أدناه."
+                  "⚠️ رقم الهاتف غير معتمد أو غير مسجل بعد لدى الإدارة. يرجى الانتظار حتى يتم اعتماد طلبك."
               )
           else:
             st.error("الرجاء إدخال رقم الهاتف أولاً.")
@@ -277,13 +276,12 @@ if st.session_state.merchant_step == "login_or_register":
                     INSERT INTO merchants (name, category, phone, location, status, image_path)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (reg_name, reg_cat, reg_phone, full_loc_data, "معتمد", m_img_path),
+                (reg_name, reg_cat, reg_phone, full_loc_data, "قيد المراجعة", m_img_path),
             )
             conn.commit()
             conn.close()
             st.success(
-                "🎉 تم تسجيل متجرك بنجاح وتم اعتماده في النظام! يمكنك الآن تسجيل"
-                " الدخول برقم هاتفك."
+                "🎉 تم إرسال طلب انضمام متجرك بنجاح إلى الإدارة! سيتم مراجعته واعتماده قريباً لتتمكن من الدخول."
             )
           except Exception as e:
             st.error(f"عطل أو رقم الهاتف مستخدم مسبقاً: {e}")
