@@ -266,17 +266,19 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # خانة البحث المرتبطة بـ st.session_state.search_query مباشرة لتتفرغ تماماً عند التصفير
+    # التحقق من وجود مفتاح البحث في الجلسة أولاً لضمان عدم حدوث تضارب
+    if "user_search_input" not in st.session_state:
+        st.session_state.user_search_input = st.session_state.search_query
+
     def update_search():
         st.session_state.search_query = st.session_state.user_search_input
 
     st.text_input(
         "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
-        value=st.session_state.search_query,
         key="user_search_input",
         on_change=update_search
     )
-    # تحديث القيمة الفعلية من خانة الإدخال في حال التعديل المباشر
+    # تحديث القيمة الفعلية للبحث بناءً على ما أدخله المستخدم
     st.session_state.search_query = st.session_state.user_search_input
 
     st.subheader("📁 الأقسام الرئيسية")
@@ -307,7 +309,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                     st.session_state.selected_category = c_name
                     st.query_params["cat"] = c_name
-                    # تصفير نص البحث بالكامل وتفريغ خانة الإدخال فوراً
+                    # تصفير نص البحث بالكامل وتفريغ خانة الإدخال فوراً دون تعارض
                     st.session_state.search_query = ""
                     st.session_state.user_search_input = ""
                     st.rerun()
@@ -337,7 +339,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 if str(m.get("category", "")).strip() == selected_cat
             ]
 
-        # 2. البحث الشامل السريع (فقط إذا كتب المستخدم شيئاً في خانة البحث ولم يتم تصفيرها)
+        # 2. البحث الشامل السريع
         current_search = st.session_state.search_query.strip()
         if current_search:
             s = current_search.lower()
