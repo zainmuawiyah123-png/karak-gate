@@ -240,6 +240,7 @@ nav_cols = st.columns(3)
 with nav_cols[0]:
     if st.button("🏠 الرئيسية", use_container_width=True):
         st.session_state.nav_tab = "الرئيسية"
+        st.session_state.search_query = ""  # تفريغ البحث عند العودة للرئيسية
         st.rerun()
 with nav_cols[1]:
     if st.button("📦 طلباتي والتتبع", use_container_width=True):
@@ -266,7 +267,7 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # خانة البحث بدون key متعارض لتجنب أي مشاكل في الـ State
+    # خانة البحث مع ربطها المباشر بالقيمة المخزنة في الجلسة
     user_input = st.text_input(
         "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
         value=st.session_state.search_query
@@ -303,7 +304,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                     st.session_state.selected_category = c_name
                     st.query_params["cat"] = c_name
-                    # تصفير نص البحث بأمان تام
+                    # تصفير نص البحث بالكامل عند الضغط على أي قسم لضمان عرض أصناف ومتاجر القسم الجديد كاملة
                     st.session_state.search_query = ""
                     st.rerun()
 
@@ -332,7 +333,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 if str(m.get("category", "")).strip() == selected_cat
             ]
 
-        # 2. البحث الشامل السريع
+        # 2. البحث الشامل السريع (يعمل فقط إذا كتب المستخدم نصاً في خانة البحث ولم يتم تصفيره عند اختيار قسم)
         current_search = st.session_state.search_query.strip()
         if current_search:
             s = current_search.lower()
