@@ -91,7 +91,7 @@ st.markdown(
     """
     <div class="admin-header">
         <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
-        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
+        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، طلبات الانضمام، الأصناف، السائقين، والطلبات</div>
     </div>
     """,
     unsafe_allow_html=True
@@ -108,7 +108,8 @@ categories_list = [
 # ============================================================
 tabs = st.tabs([
     "📦 الطلبات والتنبيهات",
-    "🏬 المتاجر", 
+    "🔔 طلبات انضمام المتاجر",
+    "🏬 المتاجر المعتمدة", 
     "📋 أصناف المتاجر",
     "🛵 إدارة السائقين", 
     "👥 سجل الزبائن", 
@@ -116,7 +117,7 @@ tabs = st.tabs([
     "📊 التقرير المالي"
 ])
 
-tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
+tab_orders, tab_merchant_requests, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
 
 
 # ============================================================
@@ -215,16 +216,51 @@ with tab_orders:
 
 
 # ============================================================
-# 2. المتاجر
+# 2. طلبات انضمام المتاجر الجديدة
+# ============================================================
+with tab_merchant_requests:
+    st.subheader("🔔 طلبات انضمام المتاجر الجديدة (قيد الانتظار)")
+    try:
+        pending_merchants = sb.table("merchants").select("*").eq("status", "قيد المراجعة").execute().data or []
+        if pending_merchants:
+            for pm in pending_merchants:
+                st.markdown(f"""
+                <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:2px solid #FF5722; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <b>🏬 اسم المتجر: {pm.get('name')}</b><br>
+                    <span>📂 القسم: {pm.get('category')} | 📞 الهاتف: {pm.get('phone')}</span><br>
+                    <span>📍 الموقع: {pm.get('location')}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                col_acc, col_rej = st.columns(2)
+                with col_acc:
+                    if st.button(f"✅ اعتماد وتفعيل المتجر '{pm.get('name')}'", key=f"acc_m_{pm['id']}", use_container_width=True):
+                        sb.table("merchants").update({"status": "معتمد"}).eq("id", pm["id"]).execute()
+                        st.success(f"🎉 تم اعتماد المتجر {pm.get('name')} بنجاح وأصبح متاحاً للزبائن!")
+                        st.rerun()
+                with col_rej:
+                    if st.button(f"🗑 رفض وحذف الطلب", key=f"rej_m_{pm['id']}", use_container_width=True):
+                        sb.table("merchants").delete().eq("id", pm["id"]).execute()
+                        st.warning("تم رفض الطلب وحذف السجل.")
+                        st.rerun()
+                st.markdown("---")
+        else:
+            st.info("لا توجد طلبات انضمام جديدة قيد المراجعة حالياً.")
+    except Exception as e:
+        st.error(f"خطأ أثناء جلب طلبات المتاجر: {e}")
+
+
+# ============================================================
+# 3. المتاجر المعتمدة
 # ============================================================
 with tab_merchants:
-    st.subheader("🏬 إدارة المتاجر الشاملة")
+    st.subheader("🏬 إدارة المتاجر المعتمدة")
     
     sub_m_tab1, sub_m_tab2 = st.tabs(["تعديل / حذف متجر قائم", "إضافة متجر جديد"])
     
     with sub_m_tab1:
         try:
-            merchants = sb.table("merchants").select("*").execute().data or []
+            merchants = sb.table("merchants").select("*").eq("status", "معتمد").execute().data or []
             if merchants:
                 m_names = [m["name"] for m in merchants]
                 sel_m = st.selectbox("اختر المتجر للتعديل:", m_names, key="sel_merchant_edit")
@@ -277,7 +313,7 @@ with tab_merchants:
                             st.warning("تم حذف المتجر نهائياً.")
                             st.rerun()
             else:
-                st.info("لا توجد متاجر مسجلة.")
+                st.info("لا توجد متاجر معتمدة مسجلة.")
         except Exception as e:
             st.error(f"خطأ: {e}")
 
@@ -324,7 +360,7 @@ with tab_merchants:
 
 
 # ============================================================
-# 3. أصناف المتاجر
+# 4. أصناف المتاجر
 # ============================================================
 with tab_products:
     st.subheader("📋 إدارة أصناف ومنتجات المتاجر (إضافة، تعديل، حذف)")
@@ -332,14 +368,14 @@ with tab_products:
     sub_p_tab1, sub_p_tab2 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد"])
 
     try:
-        merchants_data = sb.table("merchants").select("name").execute().data or []
+        merchants_data = sb.table("merchants").select("name").eq("status", "معتمد").execute().data or []
         m_names_only = [m["name"] for m in merchants_data]
     except Exception:
         m_names_only = []
 
     with sub_p_tab1:
         if not m_names_only:
-            st.warning("لا توجد متاجر مسجلة حالياً.")
+            st.warning("لا توجد متاجر معتمدة مسجلة حالياً.")
         else:
             sel_store_for_prod = st.selectbox("اختر المتجر لعرض أصنافه:", m_names_only, key="sel_store_prods")
             try:
@@ -392,7 +428,7 @@ with tab_products:
 
     with sub_p_tab2:
         if not m_names_only:
-            st.warning("الرجاء إضافة متجر أولاً لتتمكن من إضافة أصناف إليه.")
+            st.warning("الرجاء اعتماد متجر أولاً لتتمكن من إضافة أصناف إليه.")
         else:
             with st.form("admin_add_product_form"):
                 prod_merchant = st.selectbox("اختر المتجر:", m_names_only, key="prod_merch_add")
@@ -430,7 +466,7 @@ with tab_products:
 
 
 # ============================================================
-# 4. إدارة السائقين
+# 5. إدارة السائقين
 # ============================================================
 with tab_drivers:
     st.subheader("🛵 إدارة السائقين (تعديل، حذف، إضافة، ورابط الموقع)")
@@ -511,7 +547,7 @@ with tab_drivers:
 
 
 # ============================================================
-# 5. سجل الزبائن
+# 6. سجل الزبائن
 # ============================================================
 with tab_customers:
     st.subheader("👥 سجل الزبائن وعناوينهم المرسلة")
@@ -535,7 +571,7 @@ with tab_customers:
 
 
 # ============================================================
-# 6. إدارة العروض والتخفيضات
+# 7. إدارة العروض والتخفيضات
 # ============================================================
 with tab_offers:
     st.subheader("🏷 إدارة العروض والتخفيضات للمتاجر")
@@ -549,7 +585,7 @@ with tab_offers:
 
 
 # ============================================================
-# 7. التقرير المالي
+# 8. التقرير المالي
 # ============================================================
 with tab_finance:
     st.subheader("📊 التقرير المالي الشامل")
