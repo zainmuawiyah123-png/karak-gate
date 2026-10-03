@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث
+# CSS
 # ============================================================
 st.markdown(
     """
@@ -136,7 +136,7 @@ sb = db()
 
 
 # ============================================================
-# التحديث التلقائي للصفحة
+# التحديث التلقائي
 # ============================================================
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -197,7 +197,7 @@ def safe_price(value):
 
 
 # ============================================================
-# دالة عرض الصور (بحجم كبير وواضح)
+# دالة عرض الصور
 # ============================================================
 def display_image(value, width=100, fallback="🛒"):
     if not value:
@@ -232,7 +232,7 @@ def display_image(value, width=100, fallback="🛒"):
 
 
 # ============================================================
-# قائمة الأقسام
+# الأقسام
 # ============================================================
 categories = [
     {"name": "الكل", "image": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=300&q=80"},
@@ -294,7 +294,6 @@ if st.session_state.nav_tab == "الرئيسية":
         all_merchants = []
         all_products = []
 
-    # صفحة المتجر المخصص
     if st.session_state.selected_merchant:
         mname = st.session_state.selected_merchant
         m_data = next((m for m in all_merchants if m.get("name") == mname), {"name": mname, "category": "", "location": "", "map_link": ""})
@@ -352,7 +351,6 @@ if st.session_state.nav_tab == "الرئيسية":
             else:
                 st.info("لا توجد أصناف مضافة لهذا المتجر حتى الآن.")
 
-        # السلة
         with right_m:
             st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
             st.subheader("🛍 سلة الطلبات والفاتورة")
@@ -411,7 +409,6 @@ if st.session_state.nav_tab == "الرئيسية":
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # العرض العادي
     else:
         user_input = st.text_input(
             "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
@@ -508,7 +505,6 @@ if st.session_state.nav_tab == "الرئيسية":
                             st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
 
-        # السلة
         with right:
             st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
             st.subheader("🛍 سلة الطلبات والفاتورة")
@@ -569,7 +565,7 @@ if st.session_state.nav_tab == "الرئيسية":
 
 
 # ============================================================
-# 2. الطلبات وتتبع الرحلة الحي
+# 2. الطلبات وتتبع الرحلة
 # ============================================================
 elif st.session_state.nav_tab == "الطلبات":
     st.markdown(
@@ -643,7 +639,7 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل (مع إصلاح تفاعلي كامل للأزرار)
+# 3. الحساب وعنوان التوصيل (مبسط ومستقر تماماً)
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
@@ -656,61 +652,51 @@ elif st.session_state.nav_tab == "الحساب":
         unsafe_allow_html=True
     )
 
-    with st.form("customer_account_form"):
-        col_acc1, col_acc2 = st.columns(2)
-        with col_acc1:
-            input_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
-            input_phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
-        with col_acc2:
-            input_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
+    # حقول إدخال مرتبطة مباشرة بمتغيرات الـ Session State لضمان القراءة والفورية
+    st.session_state.customer_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
+    
+    # حفظ الرقم القديم للمقارنة في حال تم تغييره
+    old_phone_val = st.session_state.phone
+    st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
+    
+    st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
+    st.session_state.customer_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي):", value=st.session_state.customer_address)
+    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
 
-        input_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي):", value=st.session_state.customer_address)
-        input_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
+    st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
+    st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
 
-        st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
-        input_map = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+    if st.button("🌐 تحديد موقعي الحالي تلقائياً (المرج)"):
+        st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+        st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح!")
+        st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        # زر الحفظ والتحديث الأساسي داخل النموذج
-        submitted_update = st.form_submit_button("💾 حفظ وتحديث البيانات الحالية", use_container_width=True)
-        if submitted_update:
+    # الأزرار الثلاثة المستقلة والواضحة تماماً
+    col_b1, col_b2, col_b3 = st.columns(3)
+
+    with col_b1:
+        if st.button("💾 حفظ وتحديث البيانات", use_container_width=True):
             try:
-                # إذا قام العميل بتغيير رقم الهاتف، نحذف الرقم القديم ونسجل الجديد
-                if st.session_state.phone != input_phone:
-                    sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
-
                 sb.table("customers").upsert(
                     {
-                        "name": input_name,
-                        "phone": input_phone,
-                        "address": f"{input_address} (ملاحظات: {input_notes}) | البريد: {input_email} | رابط الخريطة: {input_map}"
+                        "name": st.session_state.customer_name,
+                        "phone": st.session_state.phone,
+                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
                     },
                     on_conflict="phone"
                 ).execute()
-
-                st.session_state.customer_name = input_name
-                st.session_state.phone = input_phone
-                st.session_state.customer_email = input_email
-                st.session_state.customer_address = input_address
-                st.session_state.delivery_notes = input_notes
-                st.session_state.customer_map_link = input_map
-
                 st.success("🎉 تم حفظ وتحديث بياناتك بنجاح!")
-                st.rerun()
             except Exception as e:
                 st.error(f"خطأ أثناء الحفظ: {e}")
 
-    # أزرار خارج النموذج (خارج الـ form) لضمان الاستجابة الفورية عند الضغط (تغيير رقم/منطقة، أو حذف البيانات)
-    st.markdown("---")
-    col_btn1, col_btn2 = st.columns(2)
-
-    with col_btn1:
-        if st.button("🔄 اعتماد تغيير الرقم / الانتقال لمنطقة جديدة", use_container_width=True):
+    with col_b2:
+        if st.button("🔄 تغيير الرقم / الانتقال لمنطقة أخرى", use_container_width=True):
             try:
-                # حذف السجل القديم برقم الهاتف القديم إذا تغير
-                if st.session_state.phone != st.session_state.get("phone", ""):
-                    sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
+                # إذا تغير رقم الهاتف، نقوم بحذف السجل القديم أولاً لمنع ازدواجية السجلات
+                if old_phone_val != st.session_state.phone:
+                    sb.table("customers").delete().eq("phone", old_phone_val).execute()
 
                 sb.table("customers").upsert(
                     {
@@ -720,20 +706,19 @@ elif st.session_state.nav_tab == "الحساب":
                     },
                     on_conflict="phone"
                 ).execute()
-                st.success("🎉 تم تحديث بيانات الرقم والمنطقة بنجاح!")
-                st.rerun()
+                st.success("🎉 تم اعتماد الرقم الجديد ومنطقتك المحدثة بنجاح!")
             except Exception as e:
-                st.error(f"خطأ أثناء معالجة التغيير: {e}")
+                st.error(f"خطأ أثناء تحديث رقم الهاتف أو المنطقة: {e}")
 
-    with col_btn2:
-        if st.button("🗑 مسح وحذف بيانات الحساب بالكامل", use_container_width=True):
+    with col_b3:
+        if st.button("🗑 مسح وحذف الحساب", use_container_width=True):
             try:
                 sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
                 st.session_state.customer_name = "أبو عدي"
                 st.session_state.customer_address = "الكرك - المرج"
                 st.session_state.delivery_notes = ""
                 st.session_state.customer_email = ""
-                st.success("🗑 تم مسح وحذف بيانات الحساب من قاعدة البيانات بنجاح.")
+                st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
                 st.rerun()
             except Exception as e:
                 st.error(f"خطأ أثناء حذف الحساب: {e}")
