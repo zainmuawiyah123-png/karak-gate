@@ -2,7 +2,6 @@ import sys
 import io
 import base64
 from datetime import datetime
-import urllib.parse
 
 import streamlit as st
 from supabase import create_client
@@ -12,14 +11,8 @@ from supabase import create_client
 # إعداد UTF-8
 # ============================================================
 try:
-    sys.stdout = io.TextIOWrapper(
-        sys.stdout.buffer,
-        encoding="utf-8"
-    )
-    sys.stderr = io.TextIOWrapper(
-        sys.stderr.buffer,
-        encoding="utf-8"
-    )
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 except Exception:
     pass
 
@@ -32,9 +25,7 @@ SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 try:
     if "SUPABASE_ANON_KEY" in st.secrets:
-        SUPABASE_ANON_KEY = str(
-            st.secrets["SUPABASE_ANON_KEY"]
-        ).strip()
+        SUPABASE_ANON_KEY = str(st.secrets["SUPABASE_ANON_KEY"]).strip()
 except Exception:
     pass
 
@@ -51,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS
+# CSS المحدث (خلفية جمالية وتصميم شبكي للأقسام)
 # ============================================================
 st.markdown(
     """
@@ -61,11 +52,11 @@ st.markdown(
     display: none;
 }
 .stApp {
-    background: #F8F9FA !important;
+    background: linear-gradient(135deg, #F4F6F8 0%, #E9ECEF 100%) !important;
     color: #2D3142 !important;
 }
 .block-container {
-    padding-top: 0.8rem !important;
+    padding-top: 1rem !important;
     padding-bottom: 3rem !important;
     max-width: 1400px !important;
 }
@@ -75,53 +66,68 @@ h1, h2, h3, h4, h5, h6, p, label, span {
 div[data-testid="column"] .stButton > button {
     background: #FF5722 !important;
     color: #FFFFFF !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     border: 0 !important;
     font-weight: bold !important;
-    font-size: 10px !important;
-    padding: 1px 2px !important;
-    min-height: 22px !important;
-    max-width: 75px !important;
+    font-size: 11px !important;
+    padding: 2px 4px !important;
+    min-height: 28px !important;
     margin: 0 auto !important;
     display: block !important;
 }
 .kg-header {
     background: linear-gradient(135deg, #E64A19, #FF7043);
-    border-radius: 10px;
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
 }
 .kg-header-title {
     color: white !important;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 800;
     margin: 0;
 }
 .kg-header-sub {
     color: white !important;
-    font-size: 11px;
+    font-size: 12px;
     margin: 0;
+    opacity: 0.9;
 }
 .kg-store {
     background: white;
-    border-radius: 18px;
-    padding: 15px;
+    border-radius: 16px;
+    padding: 18px;
     margin-bottom: 18px;
-    border: 1px solid #E6E6E6;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
 }
 .kg-store-title {
     font-size: 20px;
     font-weight: 900;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
 }
 .kg-cart {
     background: white;
-    border-radius: 18px;
+    border-radius: 16px;
     padding: 18px;
-    border: 1px solid #E5E5E5;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+}
+.category-card {
+    background: white;
+    border-radius: 14px;
+    padding: 10px 5px;
+    text-align: center;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+.category-card:hover {
+    border-color: #E64A19;
+    transform: translateY(-2px);
 }
 </style>
 """,
@@ -134,10 +140,7 @@ div[data-testid="column"] .stButton > button {
 # ============================================================
 def db():
     try:
-        return create_client(
-            SUPABASE_URL.strip(),
-            SUPABASE_ANON_KEY.strip()
-        )
+        return create_client(SUPABASE_URL.strip(), SUPABASE_ANON_KEY.strip())
     except Exception as e:
         st.error(f"❌ تعذر الاتصال بـ Supabase: {e}")
         st.stop()
@@ -146,7 +149,7 @@ sb = db()
 
 
 # ============================================================
-# التحديث التلقائي
+# التحديث التلقائي للصفحة
 # ============================================================
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -227,14 +230,14 @@ def display_image(value, width=60, fallback="🛒"):
 # قائمة الأقسام
 # ============================================================
 categories = [
-    {"name": "الكل", "image": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=200&q=80"},
-    {"name": "مطاعم", "image": "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=200&q=80"},
-    {"name": "حلويات", "image": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=200&q=80"},
-    {"name": "ماركت", "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80"},
-    {"name": "محامص ومكسرات", "image": "https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=200&q=80"},
-    {"name": "خضروات وفواكه", "image": "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=200&q=80"},
-    {"name": "لحوم", "image": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?auto=format&fit=crop&w=200&q=80"},
-    {"name": "صيدليات ومستلزمات طبيه", "image": "https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=200&q=80"}
+    {"name": "الكل", "image": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=300&q=80"},
+    {"name": "مطاعم", "image": "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=300&q=80"},
+    {"name": "حلويات", "image": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=300&q=80"},
+    {"name": "ماركت", "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80"},
+    {"name": "محامص ومكسرات", "image": "https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=300&q=80"},
+    {"name": "خضروات وفواكه", "image": "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80"},
+    {"name": "لحوم", "image": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?auto=format&fit=crop&w=300&q=80"},
+    {"name": "صيدليات ومستلزمات طبيه", "image": "https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=300&q=80"}
 ]
 
 
@@ -247,7 +250,7 @@ with nav_cols[0]:
         st.session_state.nav_tab = "الرئيسية"
         st.rerun()
 with nav_cols[1]:
-    if st.button("📦 طلباتي", use_container_width=True):
+    if st.button("📦 طلباتي والتتبع", use_container_width=True):
         st.session_state.nav_tab = "الطلبات"
         st.rerun()
 with nav_cols[2]:
@@ -275,19 +278,21 @@ if st.session_state.nav_tab == "الرئيسية":
 
     st.subheader("📁 الأقسام الرئيسية")
     
+    # عرض الأقسام بشكل شبكي أفقي محسن وأكبر حجماً ووضوحاً
     cols = st.columns(4)
     for i, cat in enumerate(categories):
         c_name = cat["name"]
         c_img = cat["image"]
         is_sel = (st.session_state.selected_category == c_name)
-        border_style = "border: 2px solid #2D3142; background: #FFFFFF;" if is_sel else "border: 1px solid #E5E5E5; background: #FFFFFF;"
+        border_color = "#E64A19" if is_sel else "#E2E8F0"
+        bg_color = "#FFF3EE" if is_sel else "#FFFFFF"
         
         with cols[i % 4]:
             st.markdown(
                 f"""
-                <div style="{border_style} width: 75px; height: 75px; border-radius: 8px; padding: 4px; text-align: center; margin: 0 auto 4px auto; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <img src="{c_img}" style="width: 28px; height: 28px; object-fit: cover; border-radius: 50%; margin-bottom: 2px; display: block;">
-                    <div style="font-weight: 750; font-size: 10px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 68px;">{c_name}</div>
+                <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 12px; padding: 10px 4px; text-align: center; margin-bottom: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                    <img src="{c_img}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 50%; margin: 0 auto 6px auto; display: block; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <div style="font-weight: 800; font-size: 11px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -296,8 +301,6 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.session_state.selected_category = c_name
                 st.query_params["cat"] = c_name
                 st.rerun()
-
-    st.write(f"**القسم الحالي المحدد:** `{st.session_state.selected_category}`")
 
     left, right = st.columns([2.2, 1], gap="large")
 
@@ -308,7 +311,6 @@ if st.session_state.nav_tab == "الرئيسية":
             merchants_res = sb.table("merchants").select("*").execute()
             all_merchants = merchants_res.data if merchants_res.data else []
             
-            # فلترة مرنة وشاملة لضمان ظهور المتاجر الجديدة وعدم اختفائها بسبب اختلاف مسافات أو تسميات القسم
             if st.session_state.selected_category == "الكل":
                 merchants = all_merchants
             else:
@@ -317,7 +319,6 @@ if st.session_state.nav_tab == "الرئيسية":
                     m for m in all_merchants 
                     if str(m.get("category", "")).strip() == selected_cat
                 ]
-                # كاحتياط آمن تماماً: إذا لم يتطابق التصنيف حرفياً، نعرض جميع المتاجر لضمان ظهور الجديد دائماً
                 if not merchants:
                     merchants = all_merchants
         except Exception:
@@ -338,13 +339,13 @@ if st.session_state.nav_tab == "الرئيسية":
             
             col_img, col_info = st.columns([1, 4])
             with col_img:
-                display_image(m.get("image_data"), width=50, fallback="🏬")
+                display_image(m.get("image_data"), width=55, fallback="🏬")
             with col_info:
                 st.markdown(f'<div class="kg-store-title">🏬 {mname}</div>', unsafe_allow_html=True)
                 st.caption(f"التصنيف: **{m.get('category','')}** | الموقع: {m.get('location','')}")
                 
                 if mlink:
-                    st.markdown(f'<a href="{mlink}" target="_blank">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{mlink}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
             try:
                 products = sb.table("products").select("*").eq("merchant_name", mname).execute().data or []
@@ -441,33 +442,76 @@ if st.session_state.nav_tab == "الرئيسية":
 
 
 # ============================================================
-# 2. الطلبات
+# 2. الطلبات وتتبع الرحلة الحي
 # ============================================================
 elif st.session_state.nav_tab == "الطلبات":
     st.markdown(
         """
         <div class="kg-header">
-            <div class="kg-header-title">📦 طلباتي</div>
-            <div class="kg-header-sub">متابعة حالة طلباتك السابقة والنشطة</div>
+            <div class="kg-header-title">📦 طلباتي ومتابعة رحلة التوصيل</div>
+            <div class="kg-header-sub">تابع حالة طلبك خطوة بخطوة من التجهيز وحتى الوصول</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
     try:
-        orders = sb.table("orders").select("id,order_status,driver_name,total_amount,created_at,order_details").eq("customer_phone", st.session_state.phone).order("id", desc=True).execute().data or []
+        orders = sb.table("orders").select("*").eq("customer_phone", st.session_state.phone).order("id", desc=True).execute().data or []
         if orders:
             for ord_item in orders:
+                status = ord_item.get('order_status', 'قيد التجهيز')
+                driver = ord_item.get('driver_name', '')
+                
+                # تحديد خطوات شريط التقدم بصرياً
+                steps = ["قيد التجهيز", "استلم السائق الطلب", "في الطريق", "تم الاستلام"]
+                current_step_idx = 0
+                if status in steps:
+                    current_step_idx = steps.index(status)
+                elif status == "جاهز":
+                    current_step_idx = 1
+                
                 st.markdown(f"""
-                <div style="background:white; border-radius:12px; padding:15px; margin-bottom:10px; border:1px solid #ddd;">
-                    <b>رقم الطلب: #{ord_item.get('id')}</b><br>
-                    <span>الحالة: <b>{ord_item.get('order_status')}</b></span><br>
-                    <span>المبلغ: {ord_item.get('total_amount')} د.أ</span><br>
-                    <pre style="background:#f9f9f9; padding:8px; border-radius:6px;">{ord_item.get('order_details')}</pre>
-                </div>
+                <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span style="font-size:16px; font-weight:900; color:#E64A19;">رقم الطلب: #{ord_item.get('id')}</span>
+                        <span style="background:#FFF3EE; color:#E64A19; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
+                    </div>
+                    <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>وقت الطلب:</b> {ord_item.get('created_at')}</p>
+                    <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>المبلغ الإجمالي:</b> {ord_item.get('total_amount')} د.أ</p>
+                    <hr style="margin:10px 0; border:0; border-top:1px solid #F1F5F9;">
                 """, unsafe_allow_html=True)
+                
+                # رسم شريط تتبع الرحلة البصري (Timeline Progress)
+                st.markdown("📍 **رحلة الطلب المباشرة:**")
+                prog_cols = st.columns(4)
+                for s_idx, s_name in enumerate(steps):
+                    with prog_cols[s_idx]:
+                        if s_idx <= current_step_idx:
+                            st.markdown(f"<div style='background:#E64A19; color:white; padding:6px; border-radius:8px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div style='background:#F1F5F9; color:#94A3B8; padding:6px; border-radius:8px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
+                
+                # تفاصيل السائق والوقت المتوقع للوصول
+                if current_step_idx >= 1:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        driver_display = driver if driver else "جارٍ تعيين سائق..."
+                        st.markdown(f"🛵 **السائق المسؤول:** `{driver_display}`")
+                    with col_d2:
+                        st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
+
+                with st.expander("📄 تفاصيل الأصناف المطلوبة"):
+                    st.code(ord_item.get('order_details', ''), language=None)
+
+                st.markdown("</div>", unsafe_allow_html=True)
         else:
-            st.info("لا توجد طلبات سابقة.")
+            info_col1, info_col2 = st.columns([4, 1])
+            with info_col1:
+                st.info("لا توجد طلبات سابقة مسجلة برقم هاتفك الحالي.")
+            with info_col2:
+                if st.button("🔄 تحديث الطلبات", use_container_width=True):
+                    st.rerun()
     except Exception as e:
         st.error(f"تعذر جلب الطلبات: {e}")
 
