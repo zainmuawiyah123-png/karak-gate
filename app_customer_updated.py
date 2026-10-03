@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث والمخصص
+# CSS المحدث
 # ============================================================
 st.markdown(
     """
@@ -200,7 +200,7 @@ def safe_price(value):
 
 
 # ============================================================
-# دالة عرض الصور (بحجم أكبر وواضح يطابق 3سم * 3سم)
+# دالة عرض الصور
 # ============================================================
 def display_image(value, width=100, fallback="🛒"):
     if not value:
@@ -297,7 +297,7 @@ if st.session_state.nav_tab == "الرئيسية":
         all_merchants = []
         all_products = []
 
-    # صفحة المتجر المخصص (عرض الأصناف بصور كبيرة)
+    # صفحة المتجر المخصص
     if st.session_state.selected_merchant:
         mname = st.session_state.selected_merchant
         m_data = next((m for m in all_merchants if m.get("name") == mname), {"name": mname, "category": "", "location": "", "map_link": ""})
@@ -535,7 +535,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
 
-                if st.button("🗑 تفريغ السلة", key="clear_cart_main", use_container_width=True):
+                if st.button("🗑 تفريغ السلة", use_container_width=True):
                     st.session_state.cart = []
                     st.rerun()
 
@@ -646,14 +646,14 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل مع أزرار التحديث وتغيير الرقم
+# 3. الحساب وعنوان التوصيل مع خيارات كاملة للتحديث، تغيير الهاتف، أو الحذف
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
         """
         <div class="kg-header">
             <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك الشخصية وعنوانك أو تغيير رقم الهاتف بكل سهولة</div>
+            <div class="kg-header-sub">قم بتحديث معلوماتك، تغيير عنوانك ومنطقتك، أو إدارة رقم الهاتف بكل مرونة</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -662,12 +662,12 @@ elif st.session_state.nav_tab == "الحساب":
     col_acc1, col_acc2 = st.columns(2)
     with col_acc1:
         st.session_state.customer_name = st.text_input("اسمك الكريم:", st.session_state.customer_name)
-        st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", st.session_state.phone)
+        new_phone_input = st.text_input("رقم الهاتف (المعرف الأساسي):", st.session_state.phone)
     with col_acc2:
         st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", st.session_state.customer_email)
 
-    st.session_state.customer_address = st.text_area("تفاصيل العنوان (المنطقة، الشارع، رقم البناية):", st.session_state.customer_address)
-    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل (مثل: بجانب لاندرز، الطابق الثاني):", st.session_state.delivery_notes)
+    st.session_state.customer_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي، قرب...):", st.session_state.customer_address)
+    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", st.session_state.delivery_notes)
 
     st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
     
@@ -679,45 +679,62 @@ elif st.session_state.nav_tab == "الحساب":
         st.info("💡 اضغط على الزر أدناه لتحديد موقعك الحالي في الكرك بدقة:")
         if st.button("🌐 تحديد موقعي الحالي تلقائياً"):
             st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-            st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح (الكرك - المرج)!")
+            st.success("✅ تم تحديث إحداثيات موقعك الجغرافي بنجاح!")
 
     if st.session_state.customer_map_link:
         st.markdown(f'<a href="{st.session_state.customer_map_link}" target="_blank">🗺 اضغط هنا لمعاينة موقعك المسجل على الخريطة</a>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    btn_col1, btn_col2 = st.columns(2)
+    # تقسيم الأزرار لثلاث خيارات واضحة (حفظ، تغيير الهاتف والمنطقة، حذف البيانات)
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
 
     with btn_col1:
-        if st.button("💾 حفظ وتحديث البيانات الحالية", use_container_width=True):
+        if st.button("💾 حفظ وتحديث البيانات", use_container_width=True):
             try:
                 sb.table("customers").upsert(
                     {
                         "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
+                        "phone": new_phone_input,
                         "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
                     },
                     on_conflict="phone"
                 ).execute()
-                st.session_state.old_phone = st.session_state.phone
-                st.success("🎉 تم حفظ وتحديث بياناتك بنجاح!")
+                st.session_state.phone = new_phone_input
+                st.success("🎉 تم حفظ وتحديث بياناتك وعنوانك بنجاح!")
                 st.rerun()
             except Exception as e:
                 st.error(f"خطأ أثناء حفظ البيانات: {e}")
 
     with btn_col2:
-        if st.button("🔄 تعديل وتسجيل برقم هاتف جديد", use_container_width=True):
+        if st.button("🔄 تغيير الرقم أو النقل لمنطقة جديدة", use_container_width=True):
             try:
+                # إذا قام الزبون بتغيير رقم الهاتف، نقوم بحذف السجل القديم لتفادي التكرار وتسجيل السجل الجديد
+                if st.session_state.phone != new_phone_input:
+                    sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
+                
                 sb.table("customers").upsert(
                     {
                         "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
+                        "phone": new_phone_input,
                         "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
                     },
                     on_conflict="phone"
                 ).execute()
-                st.session_state.old_phone = st.session_state.phone
-                st.success(f"🎉 تم اعتماد رقم الهاتف الجديد ({st.session_state.phone}) وتحديث بيانات الحساب بنجاح!")
+                
+                st.session_state.phone = new_phone_input
+                st.success("🎉 تم تحديث الرقم والمنطقة بنجاح وحفظ البيانات بالكامل!")
                 st.rerun()
             except Exception as e:
-                st.error(f"خطأ أثناء تحديث رقم الهاتف: {e}")
+                st.error(f"خطأ أثناء تحديث بيانات العميل: {e}")
+
+    with btn_col3:
+        if st.button("🗑 حذف بيانات الحساب", use_container_width=True):
+            try:
+                sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
+                st.success("🗑 تم حذف بيانات حسابك بنجاح من النظام.")
+                st.session_state.customer_name = "زائر"
+                st.session_state.customer_address = ""
+                st.rerun()
+            except Exception as e:
+                st.error(f"خطأ أثناء حذف الحساب: {e}")
