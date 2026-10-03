@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث (تصميم متناسق للأقسام بدون أزرار مزدوجة)
+# CSS المحدث (تصميم مرن ومتناسق للأقسام للهاتف والكمبيوتر بدون أزرار مكررة)
 # ============================================================
 st.markdown(
     """
@@ -63,6 +63,7 @@ st.markdown(
 h1, h2, h3, h4, h5, h6, p, label, span {
     color: #2D3142 !important;
 }
+/* تنسيق الأزرار الافتراضية العامة */
 div[data-testid="column"] .stButton > button {
     background: #FF5722 !important;
     color: #FFFFFF !important;
@@ -267,30 +268,34 @@ if st.session_state.nav_tab == "الرئيسية":
 
     st.subheader("📁 الأقسام الرئيسية")
     
-    # عرض الأقسام بخلفية بيضاء موحدة للجميع مع تمييز القسم المختار بإطار برتقالي وتصميم أنيق متناسق
-    cols = st.columns(4)
-    for i, cat in enumerate(categories):
-        c_name = cat["name"]
-        c_img = cat["image"]
-        is_sel = (st.session_state.selected_category == c_name)
-        border_color = "#E64A19" if is_sel else "#E2E8F0"
-        shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.15);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
-        
-        with cols[i % 4]:
-            st.markdown(
-                f"""
-                <div style="background: #FFFFFF; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 8px; text-align: center; margin-bottom: 8px; {shadow_style}">
-                    <img src="{c_img}" style="width: 65px; height: 65px; object-fit: cover; border-radius: 50%; margin: 0 auto 8px auto; display: block; border: 2px solid #F1F5F9; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
-                    <div style="font-weight: 800; font-size: 13px; color: #2D3142; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; margin-bottom: 8px;">{c_name}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            btn_label = f"✓ {c_name}" if is_sel else f"اختر {c_name}"
-            if st.button(btn_label, key=f"cat_card_{i}", use_container_width=True):
-                st.session_state.selected_category = c_name
-                st.query_params["cat"] = c_name
-                st.rerun()
+    # تصميم متجاوب (Responsive Grid) للأقسام يضمن ظهورها بشكل منظم جداً في الهاتف والكمبيوتر دون تكرار الأزرار
+    cols_per_row = 4
+    for i in range(0, len(categories), cols_per_row):
+        row_cats = categories[i:i + cols_per_row]
+        c_cols = st.columns(len(row_cats))
+        for j, cat in enumerate(row_cats):
+            c_name = cat["name"]
+            c_img = cat["image"]
+            is_sel = (st.session_state.selected_category == c_name)
+            border_color = "#E64A19" if is_sel else "#E2E8F0"
+            bg_color = "#FFF8F5" if is_sel else "#FFFFFF"
+            shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.2);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
+            
+            with c_cols[j]:
+                st.markdown(
+                    f"""
+                    <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <img src="{c_img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 50%; margin-bottom: 6px; border: 2px solid #F1F5F9; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="font-weight: 800; font-size: 12px; color: #2D3142; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
+                if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
+                    st.session_state.selected_category = c_name
+                    st.query_params["cat"] = c_name
+                    st.rerun()
 
     left, right = st.columns([2.2, 1], gap="large")
 
@@ -470,7 +475,6 @@ elif st.session_state.nav_tab == "الطلبات":
                     <hr style="margin:10px 0; border:0; border-top:1px solid #F1F5F9;">
                 """, unsafe_allow_html=True)
                 
-                # تتبع الرحلة البصري
                 st.markdown("📍 **رحلة الطلب المباشرة:**")
                 prog_cols = st.columns(4)
                 for s_idx, s_name in enumerate(steps):
@@ -480,7 +484,6 @@ elif st.session_state.nav_tab == "الطلبات":
                         else:
                             st.markdown(f"<div style='background:#F1F5F9; color:#94A3B8; padding:6px; border-radius:8px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
                 
-                # تفاصيل السائق والوقت المتوقع للوصول ورابط مسار الزبون
                 if current_step_idx >= 1:
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_d1, col_d2 = st.columns(2)
