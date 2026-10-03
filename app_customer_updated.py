@@ -266,20 +266,14 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # التحقق من وجود مفتاح البحث في الجلسة أولاً لضمان عدم حدوث تضارب
-    if "user_search_input" not in st.session_state:
-        st.session_state.user_search_input = st.session_state.search_query
-
-    def update_search():
-        st.session_state.search_query = st.session_state.user_search_input
-
-    st.text_input(
+    # خانة البحث بدون key متعارض لتجنب أي مشاكل في الـ State
+    user_input = st.text_input(
         "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
-        key="user_search_input",
-        on_change=update_search
+        value=st.session_state.search_query
     )
-    # تحديث القيمة الفعلية للبحث بناءً على ما أدخله المستخدم
-    st.session_state.search_query = st.session_state.user_search_input
+    
+    if user_input != st.session_state.search_query:
+        st.session_state.search_query = user_input
 
     st.subheader("📁 الأقسام الرئيسية")
     
@@ -309,9 +303,8 @@ if st.session_state.nav_tab == "الرئيسية":
                 if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                     st.session_state.selected_category = c_name
                     st.query_params["cat"] = c_name
-                    # تصفير نص البحث بالكامل وتفريغ خانة الإدخال فوراً دون تعارض
+                    # تصفير نص البحث بأمان تام
                     st.session_state.search_query = ""
-                    st.session_state.user_search_input = ""
                     st.rerun()
 
     left, right = st.columns([2.2, 1], gap="large")
