@@ -165,8 +165,8 @@ if "cart" not in st.session_state:
 if "nav_tab" not in st.session_state:
     st.session_state.nav_tab = "الرئيسية"
 
-if "active_search" not in st.session_state:
-    st.session_state.active_search = ""
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
 
 query_params = st.query_params
 if "cat" in query_params:
@@ -266,10 +266,18 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # خانة البحث المستقلة
-    search_val = st.text_input("🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...", value=st.session_state.active_search, key="global_search_input")
-    if search_val != st.session_state.active_search:
-        st.session_state.active_search = search_val
+    # خانة البحث المرتبطة بـ st.session_state.search_query مباشرة لتتفرغ تماماً عند التصفير
+    def update_search():
+        st.session_state.search_query = st.session_state.user_search_input
+
+    st.text_input(
+        "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
+        value=st.session_state.search_query,
+        key="user_search_input",
+        on_change=update_search
+    )
+    # تحديث القيمة الفعلية من خانة الإدخال في حال التعديل المباشر
+    st.session_state.search_query = st.session_state.user_search_input
 
     st.subheader("📁 الأقسام الرئيسية")
     
@@ -299,8 +307,9 @@ if st.session_state.nav_tab == "الرئيسية":
                 if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                     st.session_state.selected_category = c_name
                     st.query_params["cat"] = c_name
-                    # تصفير بحث النص بالكامل وتحديث الـ session state ليختفي نص البحث من خانة الإدخال فوراً
-                    st.session_state.active_search = ""
+                    # تصفير نص البحث بالكامل وتفريغ خانة الإدخال فوراً
+                    st.session_state.search_query = ""
+                    st.session_state.user_search_input = ""
                     st.rerun()
 
     left, right = st.columns([2.2, 1], gap="large")
@@ -329,7 +338,7 @@ if st.session_state.nav_tab == "الرئيسية":
             ]
 
         # 2. البحث الشامل السريع (فقط إذا كتب المستخدم شيئاً في خانة البحث ولم يتم تصفيرها)
-        current_search = st.session_state.active_search.strip()
+        current_search = st.session_state.search_query.strip()
         if current_search:
             s = current_search.lower()
             matching_merchants_by_product = set()
