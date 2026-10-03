@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث (تصميم مرن ومتناسق للأقسام للهاتف والكمبيوتر بدون أزرار مكررة)
+# CSS المحدث
 # ============================================================
 st.markdown(
     """
@@ -63,7 +63,6 @@ st.markdown(
 h1, h2, h3, h4, h5, h6, p, label, span {
     color: #2D3142 !important;
 }
-/* تنسيق الأزرار الافتراضية العامة */
 div[data-testid="column"] .stButton > button {
     background: #FF5722 !important;
     color: #FFFFFF !important;
@@ -268,7 +267,6 @@ if st.session_state.nav_tab == "الرئيسية":
 
     st.subheader("📁 الأقسام الرئيسية")
     
-    # تصميم متجاوب (Responsive Grid) للأقسام يضمن ظهورها بشكل منظم جداً في الهاتف والكمبيوتر دون تكرار الأزرار
     cols_per_row = 4
     for i in range(0, len(categories), cols_per_row):
         row_cats = categories[i:i + cols_per_row]
@@ -310,12 +308,11 @@ if st.session_state.nav_tab == "الرئيسية":
                 merchants = all_merchants
             else:
                 selected_cat = st.session_state.selected_category.strip()
+                # فلترة دقيقة وصحيحة: جلب فقط المتاجر التي تطابق القسم المحدد حصراً دون جلب أقسام أخرى
                 merchants = [
                     m for m in all_merchants 
                     if str(m.get("category", "")).strip() == selected_cat
                 ]
-                if not merchants:
-                    merchants = all_merchants
         except Exception:
             merchants = []
 
