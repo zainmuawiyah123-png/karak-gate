@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS المحدث
+# CSS المحدث والمخصص
 # ============================================================
 st.markdown(
     """
@@ -95,18 +95,19 @@ div[data-testid="column"] .stButton > button {
     margin: 0;
     opacity: 0.9;
 }
-.kg-store {
+.kg-store-card {
     background: white;
     border-radius: 16px;
-    padding: 18px;
-    margin-bottom: 18px;
+    padding: 16px;
+    margin-bottom: 15px;
     border: 1px solid #E2E8F0;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    text-align: center;
+    transition: all 0.3s ease;
 }
-.kg-store-title {
-    font-size: 20px;
-    font-weight: 900;
-    margin-bottom: 6px;
+.kg-store-card:hover {
+    border-color: #E64A19;
+    box-shadow: 0 6px 20px rgba(230,74,25,0.15);
 }
 .kg-cart {
     background: white;
@@ -150,11 +151,20 @@ except Exception:
 if "phone" not in st.session_state:
     st.session_state.phone = "0790000000"
 
+if "old_phone" not in st.session_state:
+    st.session_state.old_phone = "0790000000"
+
 if "customer_name" not in st.session_state:
     st.session_state.customer_name = "أبو عدي"
 
+if "customer_email" not in st.session_state:
+    st.session_state.customer_email = "abu.adi@example.com"
+
 if "customer_address" not in st.session_state:
     st.session_state.customer_address = "الكرك - المرج"
+
+if "delivery_notes" not in st.session_state:
+    st.session_state.delivery_notes = "يرجى الاتصال عند الوصول"
 
 if "customer_map_link" not in st.session_state:
     st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
@@ -170,6 +180,9 @@ if "search_query" not in st.session_state:
 
 if "search_input_key" not in st.session_state:
     st.session_state.search_input_key = 0
+
+if "selected_merchant" not in st.session_state:
+    st.session_state.selected_merchant = None
 
 query_params = st.query_params
 if "cat" in query_params:
@@ -187,11 +200,11 @@ def safe_price(value):
 
 
 # ============================================================
-# دالة عرض الصور
+# دالة عرض الصور (بحجم أكبر وواضح يطابق 3سم * 3سم)
 # ============================================================
-def display_image(value, width=60, fallback="🛒"):
+def display_image(value, width=100, fallback="🛒"):
     if not value:
-        st.markdown(f"<span style='font-size:24px;'>{fallback}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:32px;'>{fallback}</span>", unsafe_allow_html=True)
         return
 
     val_str = str(value).strip()
@@ -218,7 +231,7 @@ def display_image(value, width=60, fallback="🛒"):
     except Exception:
         pass
 
-    st.markdown(f"<span style='font-size:24px;'>{fallback}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='font-size:32px;'>{fallback}</span>", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -243,16 +256,19 @@ nav_cols = st.columns(3)
 with nav_cols[0]:
     if st.button("🏠 الرئيسية", use_container_width=True):
         st.session_state.nav_tab = "الرئيسية"
+        st.session_state.selected_merchant = None
         st.session_state.search_query = ""
         st.session_state.search_input_key += 1
         st.rerun()
 with nav_cols[1]:
     if st.button("📦 طلباتي والتتبع", use_container_width=True):
         st.session_state.nav_tab = "الطلبات"
+        st.session_state.selected_merchant = None
         st.rerun()
 with nav_cols[2]:
     if st.button("👤 حسابي", use_container_width=True):
         st.session_state.nav_tab = "الحساب"
+        st.session_state.selected_merchant = None
         st.rerun()
 
 
@@ -271,204 +287,288 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # خانة البحث مع مفتاح متغير يضمن تفريغ الحقل بصرياً تماماً عند تغيره
-    user_input = st.text_input(
-        "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
-        value=st.session_state.search_query,
-        key=f"user_search_box_{st.session_state.search_input_key}"
-    )
-    
-    if user_input != st.session_state.search_query:
-        st.session_state.search_query = user_input
+    try:
+        merchants_res = sb.table("merchants").select("*").execute()
+        all_merchants = merchants_res.data if merchants_res.data else []
+        
+        products_res = sb.table("products").select("*").execute()
+        all_products = products_res.data if products_res.data else []
+    except Exception:
+        all_merchants = []
+        all_products = []
 
-    st.subheader("📁 الأقسام الرئيسية")
-    
-    cols_per_row = 4
-    for i in range(0, len(categories), cols_per_row):
-        row_cats = categories[i:i + cols_per_row]
-        c_cols = st.columns(len(row_cats))
-        for j, cat in enumerate(row_cats):
-            c_name = cat["name"]
-            c_img = cat["image"]
-            is_sel = (st.session_state.selected_category == c_name)
-            border_color = "#E64A19" if is_sel else "#E2E8F0"
-            bg_color = "#FFF8F5" if is_sel else "#FFFFFF"
-            shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.2);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
-            
-            with c_cols[j]:
-                st.markdown(
-                    f"""
-                    <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <img src="{c_img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 50%; margin-bottom: 6px; border: 2px solid #F1F5F9; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <div style="font-weight: 800; font-size: 12px; color: #2D3142; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
-                if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
-                    st.session_state.selected_category = c_name
-                    st.query_params["cat"] = c_name
-                    # تصفير نص البحث وتحديث مفتاح الحقل لمسحه بصرياً تماماً
-                    st.session_state.search_query = ""
-                    st.session_state.search_input_key += 1
-                    st.rerun()
+    # صفحة المتجر المخصص (عرض الأصناف بصور كبيرة)
+    if st.session_state.selected_merchant:
+        mname = st.session_state.selected_merchant
+        m_data = next((m for m in all_merchants if m.get("name") == mname), {"name": mname, "category": "", "location": "", "map_link": ""})
+        
+        if st.button("⬅ العودة إلى قائمة المتاجر والأقسام"):
+            st.session_state.selected_merchant = None
+            st.rerun()
 
-    left, right = st.columns([2.2, 1], gap="large")
+        left_m, right_m = st.columns([2.2, 1], gap="large")
 
-    with left:
-        st.subheader("🏬 المتاجر المعتمدة والأصناف")
+        with left_m:
+            st.markdown(f"""
+            <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow:0 4px 15px rgba(0,0,0,0.03); display:flex; align-items:center; gap:15px;">
+                <div>
+                    <div style="font-size:24px; font-weight:900; color:#E64A19;">🏬 {mname}</div>
+                    <div style="font-size:13px; color:#64748B; margin-top:4px;">التصنيف: <b>{m_data.get('category','')}</b> | الموقع: {m_data.get('location','')}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        try:
-            merchants_res = sb.table("merchants").select("*").execute()
-            all_merchants = merchants_res.data if merchants_res.data else []
-            
-            products_res = sb.table("products").select("*").execute()
-            all_products = products_res.data if products_res.data else []
-        except Exception:
-            all_merchants = []
-            all_products = []
+            if m_data.get("map_link"):
+                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
-        # 1. فلترة المتاجر حسب القسم المحدد
-        if st.session_state.selected_category == "الكل":
-            filtered_merchants = all_merchants
-        else:
-            selected_cat = st.session_state.selected_category.strip()
-            filtered_merchants = [
-                m for m in all_merchants 
-                if str(m.get("category", "")).strip() == selected_cat
-            ]
+            store_products = [p for p in all_products if p.get("merchant_name") == mname]
 
-        # 2. البحث الشامل السريع
-        current_search = st.session_state.search_query.strip()
-        if current_search:
-            s = current_search.lower()
-            matching_merchants_by_product = set()
-            for p in all_products:
-                if s in str(p.get("item_name") or "").lower():
-                    matching_merchants_by_product.add(p.get("merchant_name"))
-
-            merchants = []
-            for m in filtered_merchants:
-                mname = str(m.get("name") or "").lower()
-                mcat = str(m.get("category") or "").lower()
-                if s in mname or s in mcat or m.get("name") in matching_merchants_by_product:
-                    merchants.append(m)
-        else:
-            merchants = filtered_merchants
-
-        if not merchants:
-            st.info("لا توجد متاجر أو أصناف مطابقة للبحث أو مضافة حالياً في هذا القسم.")
-
-        for mi, m in enumerate(merchants):
-            mname = m.get("name", "متجر")
-            mlink = m.get("map_link", "")
-            
-            st.markdown('<div class="kg-store">', unsafe_allow_html=True)
-            
-            col_img, col_info = st.columns([1, 4])
-            with col_img:
-                display_image(m.get("image_data"), width=55, fallback="🏬")
-            with col_info:
-                st.markdown(f'<div class="kg-store-title">🏬 {mname}</div>', unsafe_allow_html=True)
-                st.caption(f"التصنيف: **{m.get('category','')}** | الموقع: {m.get('location','')}")
+            if store_products:
+                st.subheader(f"📋 قائمة الأصناف المتوفرة ({len(store_products)} صنف)")
                 
-                if mlink:
-                    st.markdown(f'<a href="{mlink}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
-
-            products = [p for p in all_products if p.get("merchant_name") == mname]
-            if current_search:
-                s = current_search.lower()
-                if s not in mname.lower() and s not in str(m.get("category", "")).lower():
-                    products = [p for p in products if s in str(p.get("item_name") or "").lower()]
-
-            if products:
-                st.write("📋 **الأصناف المتوفرة:**")
-                for p in products:
+                for pi, p in enumerate(store_products):
                     item_name = p.get("item_name", "صنف")
                     quantity = p.get("quantity", "")
                     unit = p.get("unit", "")
                     price = safe_price(p.get("price"))
 
-                    p_col1, p_col2, p_col3 = st.columns([1, 4, 2])
+                    p_col1, p_col2, p_col3 = st.columns([1.2, 3.8, 2])
                     
                     with p_col1:
-                        display_image(p.get("image_path"), width=40, fallback="🍽")
+                        display_image(p.get("image_path"), width=100, fallback="🍽")
                     
                     with p_col2:
-                        st.markdown(f"**{item_name}**")
-                        st.caption(f"{quantity} {unit} | <span style='color:#E64A19; font-weight:bold;'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:16px; font-weight:bold; margin-top:5px;'>{item_name}</div>", unsafe_allow_html=True)
+                        st.caption(f"{quantity} {unit} | <span style='color:#E64A19; font-weight:bold; font-size:14px;'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
                     
                     with p_col3:
-                        if st.button("➕ إضافة", key=f"add_{mi}_{p['id']}", use_container_width=True):
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("➕ إضافة للسلة", key=f"add_store_p_{pi}_{p['id']}", use_container_width=True):
                             st.session_state.cart.append({
                                 "name": f"{item_name} ({quantity} {unit})",
                                 "price": price,
                                 "merchant": mname
                             })
                             st.toast(f"تمت إضافة {item_name} إلى السلة!")
+                    
+                    st.markdown("<hr style='margin:10px 0; border:0; border-top:1px solid #F1F5F9;'>", unsafe_allow_html=True)
             else:
-                st.info("لا توجد أصناف مطابقة للبحث من هذا المتجر.")
+                st.info("لا توجد أصناف مضافة لهذا المتجر حتى الآن.")
+
+        # السلة
+        with right_m:
+            st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
+            st.subheader("🛍 سلة الطلبات والفاتورة")
+
+            if not st.session_state.cart:
+                st.info("السلة فارغة حالياً.")
+            else:
+                subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
+
+                for item in st.session_state.cart:
+                    st.write(f"🔹 **{item['name']}**")
+                    st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
+
+                delivery = 1.50
+                service = 0.25
+                total = subtotal + delivery + service
+
+                st.markdown("---")
+                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
+                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
+                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
+                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+
+                if st.button("🗑 تفريغ السلة", use_container_width=True):
+                    st.session_state.cart = []
+                    st.rerun()
+
+                payment = st.radio(
+                    "اختر طريقة الدفع:",
+                    ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
+                    key="pay_store_mode"
+                )
+
+                st.markdown("---")
+                summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
+                
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True):
+                    try:
+                        sb.table("orders").insert({
+                            "customer_name": st.session_state.customer_name,
+                            "customer_phone": st.session_state.phone,
+                            "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
+                            "order_details": summary,
+                            "total_amount": total,
+                            "payment_method": payment,
+                            "order_status": "قيد التجهيز",
+                            "driver_name": "",
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }).execute()
+
+                        st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
+                        st.session_state.cart = []
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # السلة (اليمين)
-    with right:
-        st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
-        st.subheader("🛍 سلة الطلبات والفاتورة")
+    # العرض العادي
+    else:
+        user_input = st.text_input(
+            "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
+            value=st.session_state.search_query,
+            key=f"user_search_box_{st.session_state.search_input_key}"
+        )
+        
+        if user_input != st.session_state.search_query:
+            st.session_state.search_query = user_input
 
-        if not st.session_state.cart:
-            st.info("السلة فارغة حالياً.")
-        else:
-            subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
+        st.subheader("📁 الأقسام الرئيسية")
+        
+        cols_per_row = 4
+        for i in range(0, len(categories), cols_per_row):
+            row_cats = categories[i:i + cols_per_row]
+            c_cols = st.columns(len(row_cats))
+            for j, cat in enumerate(row_cats):
+                c_name = cat["name"]
+                c_img = cat["image"]
+                is_sel = (st.session_state.selected_category == c_name)
+                border_color = "#E64A19" if is_sel else "#E2E8F0"
+                bg_color = "#FFF8F5" if is_sel else "#FFFFFF"
+                shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.2);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
+                
+                with c_cols[j]:
+                    st.markdown(
+                        f"""
+                        <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                            <img src="{c_img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 50%; margin-bottom: 6px; border: 2px solid #F1F5F9; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="font-weight: 800; font-size: 12px; color: #2D3142; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
+                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
+                        st.session_state.selected_category = c_name
+                        st.query_params["cat"] = c_name
+                        st.session_state.search_query = ""
+                        st.session_state.search_input_key += 1
+                        st.rerun()
 
-            for item in st.session_state.cart:
-                st.write(f"🔹 **{item['name']}**")
-                st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
+        left, right = st.columns([2.2, 1], gap="large")
 
-            delivery = 1.50
-            service = 0.25
-            total = subtotal + delivery + service
+        with left:
+            st.subheader("🏬 المتاجر المعتمدة (اضغط على أي متجر لاستعراض أصنافه)")
 
-            st.markdown("---")
-            st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
-            st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
-            st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
-            st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+            if st.session_state.selected_category == "الكل":
+                filtered_merchants = all_merchants
+            else:
+                selected_cat = st.session_state.selected_category.strip()
+                filtered_merchants = [
+                    m for m in all_merchants 
+                    if str(m.get("category", "")).strip() == selected_cat
+                ]
 
-            if st.button("🗑 تفريغ السلة", use_container_width=True):
-                st.session_state.cart = []
-                st.rerun()
+            current_search = st.session_state.search_query.strip()
+            if current_search:
+                s = current_search.lower()
+                matching_merchants_by_product = set()
+                for p in all_products:
+                    if s in str(p.get("item_name") or "").lower():
+                        matching_merchants_by_product.add(p.get("merchant_name"))
 
-            payment = st.radio(
-                "اختر طريقة الدفع:",
-                ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"]
-            )
+                merchants = []
+                for m in filtered_merchants:
+                    mname = str(m.get("name") or "").lower()
+                    mcat = str(m.get("category") or "").lower()
+                    if s in mname or s in mcat or m.get("name") in matching_merchants_by_product:
+                        merchants.append(m)
+            else:
+                merchants = filtered_merchants
 
-            st.markdown("---")
-            summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
-            
-            if st.button("📌 تأكيد وإرسال للنظام", use_container_width=True):
-                try:
-                    sb.table("orders").insert({
-                        "customer_name": st.session_state.customer_name,
-                        "customer_phone": st.session_state.phone,
-                        "customer_address": f"{st.session_state.customer_address} | رابط الخريطة: {st.session_state.customer_map_link}",
-                        "order_details": summary,
-                        "total_amount": total,
-                        "payment_method": payment,
-                        "order_status": "قيد التجهيز",
-                        "driver_name": "",
-                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }).execute()
+            if not merchants:
+                st.info("لا توجد متاجر مطابقة للبحث أو مضافة حالياً في هذا القسم.")
 
-                    st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
+            store_cols_count = 2
+            for mi in range(0, len(merchants), store_cols_count):
+                row_stores = merchants[mi:mi + store_cols_count]
+                s_cols = st.columns(len(row_stores))
+                for sj, store in enumerate(row_stores):
+                    sname = store.get("name", "متجر")
+                    scat = store.get("category", "")
+                    sloc = store.get("location", "")
+                    
+                    with s_cols[sj]:
+                        st.markdown('<div class="kg-store-card">', unsafe_allow_html=True)
+                        display_image(store.get("image_data"), width=90, fallback="🏬")
+                        st.markdown(f"<div style='font-size:18px; font-weight:900; margin:10px 0 4px 0;'>{sname}</div>", unsafe_allow_html=True)
+                        st.caption(f"التصنيف: {scat} | الموقع: {sloc}")
+                        
+                        if st.button(f"🛒 تصفح أصناف {sname}", key=f"enter_store_{mi+sj}", use_container_width=True):
+                            st.session_state.selected_merchant = sname
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+        # السلة
+        with right:
+            st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
+            st.subheader("🛍 سلة الطلبات والفاتورة")
+
+            if not st.session_state.cart:
+                st.info("السلة فارغة حالياً.")
+            else:
+                subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
+
+                for item in st.session_state.cart:
+                    st.write(f"🔹 **{item['name']}**")
+                    st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
+
+                delivery = 1.50
+                service = 0.25
+                total = subtotal + delivery + service
+
+                st.markdown("---")
+                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
+                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
+                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
+                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+
+                if st.button("🗑 تفريغ السلة", key="clear_cart_main", use_container_width=True):
                     st.session_state.cart = []
                     st.rerun()
-                except Exception as e:
-                    st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
-        st.markdown('</div>', unsafe_allow_html=True)
+                payment = st.radio(
+                    "اختر طريقة الدفع:",
+                    ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
+                    key="pay_main_mode"
+                )
+
+                st.markdown("---")
+                summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
+                
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True):
+                    try:
+                        sb.table("orders").insert({
+                            "customer_name": st.session_state.customer_name,
+                            "customer_phone": st.session_state.phone,
+                            "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
+                            "order_details": summary,
+                            "total_amount": total,
+                            "payment_method": payment,
+                            "order_status": "قيد التجهيز",
+                            "driver_name": "",
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }).execute()
+
+                        st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
+                        st.session_state.cart = []
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ أثناء إرسال الطلب: {e}")
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -546,22 +646,28 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل مع تحديد الموقع الجغرافي
+# 3. الحساب وعنوان التوصيل مع أزرار التحديث وتغيير الرقم
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
         """
         <div class="kg-header">
             <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك وتحديد موقعك الجغرافي لتسهيل وتتبع التوصيل</div>
+            <div class="kg-header-sub">قم بتحديث معلوماتك الشخصية وعنوانك أو تغيير رقم الهاتف بكل سهولة</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.session_state.customer_name = st.text_input("اسمك الكريم:", st.session_state.customer_name)
-    st.session_state.phone = st.text_input("رقم الهاتف:", st.session_state.phone)
+    col_acc1, col_acc2 = st.columns(2)
+    with col_acc1:
+        st.session_state.customer_name = st.text_input("اسمك الكريم:", st.session_state.customer_name)
+        st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", st.session_state.phone)
+    with col_acc2:
+        st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", st.session_state.customer_email)
+
     st.session_state.customer_address = st.text_area("تفاصيل العنوان (المنطقة، الشارع، رقم البناية):", st.session_state.customer_address)
+    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل (مثل: بجانب لاندرز، الطابق الثاني):", st.session_state.delivery_notes)
 
     st.markdown("📍 **الموقع الجغرافي لتحديد مسار السائق:**")
     
@@ -579,17 +685,39 @@ elif st.session_state.nav_tab == "الحساب":
         st.markdown(f'<a href="{st.session_state.customer_map_link}" target="_blank">🗺 اضغط هنا لمعاينة موقعك المسجل على الخريطة</a>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("💾 حفظ التعديلات", use_container_width=True):
-        try:
-            sb.table("customers").upsert(
-                {
-                    "name": st.session_state.customer_name,
-                    "phone": st.session_state.phone,
-                    "address": f"{st.session_state.customer_address} (رابط الخريطة: {st.session_state.customer_map_link})"
-                },
-                on_conflict="phone"
-            ).execute()
-            st.success("🎉 تم حفظ وتحديث بياناتك وموقعك الجغرافي بنجاح!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"خطأ أثناء حفظ البيانات: {e}")
+
+    btn_col1, btn_col2 = st.columns(2)
+
+    with btn_col1:
+        if st.button("💾 حفظ وتحديث البيانات الحالية", use_container_width=True):
+            try:
+                sb.table("customers").upsert(
+                    {
+                        "name": st.session_state.customer_name,
+                        "phone": st.session_state.phone,
+                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
+                    },
+                    on_conflict="phone"
+                ).execute()
+                st.session_state.old_phone = st.session_state.phone
+                st.success("🎉 تم حفظ وتحديث بياناتك بنجاح!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"خطأ أثناء حفظ البيانات: {e}")
+
+    with btn_col2:
+        if st.button("🔄 تعديل وتسجيل برقم هاتف جديد", use_container_width=True):
+            try:
+                sb.table("customers").upsert(
+                    {
+                        "name": st.session_state.customer_name,
+                        "phone": st.session_state.phone,
+                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
+                    },
+                    on_conflict="phone"
+                ).execute()
+                st.session_state.old_phone = st.session_state.phone
+                st.success(f"🎉 تم اعتماد رقم الهاتف الجديد ({st.session_state.phone}) وتحديث بيانات الحساب بنجاح!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"خطأ أثناء تحديث رقم الهاتف: {e}")
