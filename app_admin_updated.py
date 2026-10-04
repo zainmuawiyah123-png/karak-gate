@@ -16,21 +16,29 @@ def send_whatsapp_alert(phone_number, message_text):
     whatsapp_url = f"https://wa.me/{phone_number}?text={encoded_message}"
     return whatsapp_url
 
-def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address):
+def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address, merchant_name, merchant_phone, merchant_location):
     """
     دالة الإدارة لتجهيز رسائل الواتساب:
-    - للتاجر: وصف الطلب فقط.
-    - للسائق: التوجه للتاجر مع رقم الزبون وعنوانه.
+    - للتاجر: وصف الطلب الحرفي فقط.
+    - للسائق: توجيهه للتاجر المحدد (بالاسم ورقم الهاتف والعنوان) مع رقم هاتف الزبون وعنوانه.
     """
-    merchant_phone = "962797088219"
+    admin_merchant_phone = "962797088219"
     
     # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
     merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق (التوجه للتاجر مع رقم هاتف الزبون وعنوانه)
-    driver_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو التحرك باتجاه التاجر لاستلام طلب الزبون.\n📍 عنوان الزبون: {customer_address}\n📞 هاتف الزبون: {customer_phone}"
+    # 2. رسالة السائق (تتضمن تفاصيل التاجر وتفاصيل الزبون)
+    driver_msg = (
+        f"بوابة الكرك للطلبات ترحب بكم، ارجو التحرك لاستلام الطلب من التاجر التالي:\n"
+        f"🏬 اسم المتجر: {merchant_name}\n"
+        f"📞 هاتف التاجر: {merchant_phone}\n"
+        f"📍 عنوان/موقع التاجر: {merchant_location}\n\n"
+        f"معلومات التوصيل للزبون:\n"
+        f"📍 عنوان الزبون: {customer_address}\n"
+        f"📞 هاتف الزبون: {customer_phone}"
+    )
     
-    merchant_link = send_whatsapp_alert(merchant_phone, merchant_msg)
+    merchant_link = send_whatsapp_alert(admin_merchant_phone, merchant_msg)
     driver_link = send_whatsapp_alert(driver_phone_number, driver_msg)
     
     return merchant_link, driver_link
@@ -183,6 +191,9 @@ with tab_orders:
         orders = sb.table("orders").select("*").order("id", desc=True).execute().data or []
         drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
+        
+        # جلب بيانات المتاجر لمعرفة اسم ورقم وهاتف التاجر المرتبط بالطلب إن وجد
+        merchants_data = sb.table("merchants").select("name, phone, location").execute().data or []
 
         if orders:
             for ord_item in orders:
@@ -195,11 +206,23 @@ with tab_orders:
                 details = ord_item.get("order_details")
                 payment = ord_item.get("payment_method")
                 assigned_driver_current = ord_item.get("driver_name")
+                
+                # استخراج اسم المتجر من تفاصيل الطلب أو استخدام أول متجر كافتراضي
+                m_name_extracted = "متجر بوابة الكرك"
+                m_phone_extracted = "0797088219"
+                m_loc_extracted = "الكرك"
+                
+                for m in merchants_data:
+                    if m["name"] and m["name"] in str(details):
+                        m_name_extracted = m["name"]
+                        m_phone_extracted = m.get("phone", "0797088219")
+                        m_loc_extracted = m.get("location", "الكرك")
+                        break
 
                 st.markdown(f"""
                 <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                     <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b><br>
-                    <span>📍 العنوان: {c_address}</span><br>
+                    <span>📍 عنوان الزبون: {c_address}</span><br>
                     <span>💰 الإجمالي: <b>{total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
                     <pre style="background:#F8F9FA; padding:8px; border-radius:6px; margin-top:8px;">{details}</pre>
                 </div>
@@ -229,12 +252,15 @@ with tab_orders:
                 selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
                 drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                # توليد روابط واتساب الإدارة (التاجر + السائق) حسب طلبك بدقة
+                # توليد روابط واتساب الإدارة (التاجر + السائق مع تفاصيل التاجر والزبون)
                 url_store, url_driver = process_new_order_admin(
                     details or "", 
                     drv_phone_str, 
                     c_phone_str, 
-                    c_address or ""
+                    c_address or "",
+                    m_name_extracted,
+                    m_phone_extracted,
+                    m_loc_extracted
                 )
                 
                 wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
