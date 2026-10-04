@@ -9,6 +9,32 @@ from supabase import create_client
 
 
 # ============================================================
+# دالة إرسال رسائل الواتساب (الإدارة)
+# ============================================================
+def send_whatsapp_alert(phone_number, message_text):
+    encoded_message = urllib.parse.quote(message_text)
+    whatsapp_url = f"https://wa.me/{phone_number}?text={encoded_message}"
+    return whatsapp_url
+
+def process_new_order_admin(customer_order_text, driver_phone_number, order_id, customer_name, customer_phone, customer_address, total_amount):
+    """
+    دالة الإدارة لتجهيز رسائل الواتساب للتاجر والسائق
+    """
+    merchant_phone = "962797088219"
+    
+    # 1. رسالة التاجر (النص الحرفي لطلب الزبون)
+    merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}\n\nرقم الطلب: #{order_id}\nالزبون: {customer_name} ({customer_phone})\nالعنوان: {customer_address}\nالإجمالي: {total_amount} د.أ"
+    
+    # 2. رسالة السائق
+    driver_msg = "بوابة الكرك للطلبات ترحب بكم، ارجو التحرك باتجاه التاجر لاستلام طلب الزبون."
+    
+    merchant_link = send_whatsapp_alert(merchant_phone, merchant_msg)
+    driver_link = send_whatsapp_alert(driver_phone_number, driver_msg)
+    
+    return merchant_link, driver_link
+
+
+# ============================================================
 # إعداد الصفحة (لوحة الإدارة المستقلة)
 # ============================================================
 st.set_page_config(
@@ -91,7 +117,7 @@ st.markdown(
     """
     <div class="admin-header">
         <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
-        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، طلبات الانضمام، الأصناف، السائقين، والطلبات</div>
+        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
     </div>
     """,
     unsafe_allow_html=True
@@ -108,8 +134,7 @@ categories_list = [
 # ============================================================
 tabs = st.tabs([
     "📦 الطلبات والتنبيهات",
-    "🔔 طلبات انضمام المتاجر",
-    "🏬 المتاجر المعتمدة", 
+    "🏬 المتاجر", 
     "📋 أصناف المتاجر",
     "🛵 إدارة السائقين", 
     "👥 سجل الزبائن", 
@@ -117,7 +142,7 @@ tabs = st.tabs([
     "📊 التقرير المالي"
 ])
 
-tab_orders, tab_merchant_requests, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
+tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
 
 
 # ============================================================
@@ -154,7 +179,7 @@ with tab_orders:
 
     try:
         orders = sb.table("orders").select("*").order("id", desc=True).execute().data or []
-        drivers_data = sb.table("drivers").select("name").execute().data or []
+        drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
 
         if orders:
@@ -167,6 +192,7 @@ with tab_orders:
                 status = ord_item.get("order_status", "قيد التجهيز")
                 details = ord_item.get("order_details")
                 payment = ord_item.get("payment_method")
+                assigned_driver_current = ord_item.get("driver_name")
 
                 st.markdown(f"""
                 <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
@@ -196,17 +222,32 @@ with tab_orders:
                             st.error(f"خطأ: {e}")
 
                 c_phone_str = str(c_phone or "")
-                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
-                wa_msg_store = f"تنبيه طلب جديد رقم #{oid} للزبون {c_name} ({c_phone_str}). العنوان: {c_address}. الإجمالي: {total} د.أ"
                 
-                url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
-                url_store = f"https://wa.me/962797088219?text={urllib.parse.quote(wa_msg_store)}"
+                # البحث عن رقم السائق المعين لإرسال رسالة الواتساب له
+                selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
+                drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                w_c1, w_c2 = st.columns(2)
+                # توليد روابط واتساب الإدارة (التاجر + السائق + الزبون)
+                url_store, url_driver = process_new_order_admin(
+                    details or "", 
+                    drv_phone_str, 
+                    oid, 
+                    c_name or "", 
+                    c_phone_str, 
+                    c_address or "", 
+                    total or 0
+                )
+                
+                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
+                url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
+
+                w_c1, w_c2, w_c3 = st.columns(3)
                 with w_c1:
                     st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
                 with w_c2:
-                    st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للمتجر واتساب (0797088219)</div></a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
+                with w_c3:
+                    st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق واتساب</div></a>', unsafe_allow_html=True)
 
                 st.markdown("---")
         else:
@@ -216,51 +257,16 @@ with tab_orders:
 
 
 # ============================================================
-# 2. طلبات انضمام المتاجر الجديدة
-# ============================================================
-with tab_merchant_requests:
-    st.subheader("🔔 طلبات انضمام المتاجر الجديدة (قيد الانتظار)")
-    try:
-        pending_merchants = sb.table("merchants").select("*").eq("status", "قيد المراجعة").execute().data or []
-        if pending_merchants:
-            for pm in pending_merchants:
-                st.markdown(f"""
-                <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:2px solid #FF5722; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                    <b>🏬 اسم المتجر: {pm.get('name')}</b><br>
-                    <span>📂 القسم: {pm.get('category')} | 📞 الهاتف: {pm.get('phone')}</span><br>
-                    <span>📍 الموقع: {pm.get('location')}</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                col_acc, col_rej = st.columns(2)
-                with col_acc:
-                    if st.button(f"✅ اعتماد وتفعيل المتجر '{pm.get('name')}'", key=f"acc_m_{pm['id']}", use_container_width=True):
-                        sb.table("merchants").update({"status": "معتمد"}).eq("id", pm["id"]).execute()
-                        st.success(f"🎉 تم اعتماد المتجر {pm.get('name')} بنجاح وأصبح متاحاً للزبائن!")
-                        st.rerun()
-                with col_rej:
-                    if st.button(f"🗑 رفض وحذف الطلب", key=f"rej_m_{pm['id']}", use_container_width=True):
-                        sb.table("merchants").delete().eq("id", pm["id"]).execute()
-                        st.warning("تم رفض الطلب وحذف السجل.")
-                        st.rerun()
-                st.markdown("---")
-        else:
-            st.info("لا توجد طلبات انضمام جديدة قيد المراجعة حالياً.")
-    except Exception as e:
-        st.error(f"خطأ أثناء جلب طلبات المتاجر: {e}")
-
-
-# ============================================================
-# 3. المتاجر المعتمدة
+# 2. المتاجر
 # ============================================================
 with tab_merchants:
-    st.subheader("🏬 إدارة المتاجر المعتمدة")
+    st.subheader("🏬 إدارة المتاجر الشاملة")
     
     sub_m_tab1, sub_m_tab2 = st.tabs(["تعديل / حذف متجر قائم", "إضافة متجر جديد"])
     
     with sub_m_tab1:
         try:
-            merchants = sb.table("merchants").select("*").eq("status", "معتمد").execute().data or []
+            merchants = sb.table("merchants").select("*").execute().data or []
             if merchants:
                 m_names = [m["name"] for m in merchants]
                 sel_m = st.selectbox("اختر المتجر للتعديل:", m_names, key="sel_merchant_edit")
@@ -313,7 +319,7 @@ with tab_merchants:
                             st.warning("تم حذف المتجر نهائياً.")
                             st.rerun()
             else:
-                st.info("لا توجد متاجر معتمدة مسجلة.")
+                st.info("لا توجد متاجر مسجلة.")
         except Exception as e:
             st.error(f"خطأ: {e}")
 
@@ -360,7 +366,7 @@ with tab_merchants:
 
 
 # ============================================================
-# 4. أصناف المتاجر
+# 3. أصناف المتاجر
 # ============================================================
 with tab_products:
     st.subheader("📋 إدارة أصناف ومنتجات المتاجر (إضافة، تعديل، حذف)")
@@ -368,14 +374,14 @@ with tab_products:
     sub_p_tab1, sub_p_tab2 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد"])
 
     try:
-        merchants_data = sb.table("merchants").select("name").eq("status", "معتمد").execute().data or []
+        merchants_data = sb.table("merchants").select("name").execute().data or []
         m_names_only = [m["name"] for m in merchants_data]
     except Exception:
         m_names_only = []
 
     with sub_p_tab1:
         if not m_names_only:
-            st.warning("لا توجد متاجر معتمدة مسجلة حالياً.")
+            st.warning("لا توجد متاجر مسجلة حالياً.")
         else:
             sel_store_for_prod = st.selectbox("اختر المتجر لعرض أصنافه:", m_names_only, key="sel_store_prods")
             try:
@@ -428,7 +434,7 @@ with tab_products:
 
     with sub_p_tab2:
         if not m_names_only:
-            st.warning("الرجاء اعتماد متجر أولاً لتتمكن من إضافة أصناف إليه.")
+            st.warning("الرجاء إضافة متجر أولاً لتتمكن من إضافة أصناف إليه.")
         else:
             with st.form("admin_add_product_form"):
                 prod_merchant = st.selectbox("اختر المتجر:", m_names_only, key="prod_merch_add")
@@ -466,7 +472,7 @@ with tab_products:
 
 
 # ============================================================
-# 5. إدارة السائقين
+# 4. إدارة السائقين
 # ============================================================
 with tab_drivers:
     st.subheader("🛵 إدارة السائقين (تعديل، حذف، إضافة، ورابط الموقع)")
@@ -547,7 +553,7 @@ with tab_drivers:
 
 
 # ============================================================
-# 6. سجل الزبائن
+# 5. سجل الزبائن
 # ============================================================
 with tab_customers:
     st.subheader("👥 سجل الزبائن وعناوينهم المرسلة")
@@ -571,7 +577,7 @@ with tab_customers:
 
 
 # ============================================================
-# 7. إدارة العروض والتخفيضات
+# 6. إدارة العروض والتخفيضات
 # ============================================================
 with tab_offers:
     st.subheader("🏷 إدارة العروض والتخفيضات للمتاجر")
@@ -585,7 +591,7 @@ with tab_offers:
 
 
 # ============================================================
-# 8. التقرير المالي
+# 7. التقرير المالي
 # ============================================================
 with tab_finance:
     st.subheader("📊 التقرير المالي الشامل")
