@@ -9,24 +9,26 @@ from supabase import create_client
 
 
 # ============================================================
-# دالة إرسال رسائل الواتساب (الإدارة)
+# دالة إرسال رسائل الواتساب (الإدارة) حسب الطلب بدقة
 # ============================================================
 def send_whatsapp_alert(phone_number, message_text):
     encoded_message = urllib.parse.quote(message_text)
     whatsapp_url = f"https://wa.me/{phone_number}?text={encoded_message}"
     return whatsapp_url
 
-def process_new_order_admin(customer_order_text, driver_phone_number, order_id, customer_name, customer_phone, customer_address, total_amount):
+def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address):
     """
-    دالة الإدارة لتجهيز رسائل الواتساب للتاجر والسائق
+    دالة الإدارة لتجهيز رسائل الواتساب:
+    - للتاجر: وصف الطلب فقط.
+    - للسائق: التوجه للتاجر مع رقم الزبون وعنوانه.
     """
     merchant_phone = "962797088219"
     
-    # 1. رسالة التاجر (النص الحرفي لطلب الزبون)
-    merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}\n\nرقم الطلب: #{order_id}\nالزبون: {customer_name} ({customer_phone})\nالعنوان: {customer_address}\nالإجمالي: {total_amount} د.أ"
+    # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
+    merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق
-    driver_msg = "بوابة الكرك للطلبات ترحب بكم، ارجو التحرك باتجاه التاجر لاستلام طلب الزبون."
+    # 2. رسالة السائق (التوجه للتاجر مع رقم هاتف الزبون وعنوانه)
+    driver_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو التحرك باتجاه التاجر لاستلام طلب الزبون.\n📍 عنوان الزبون: {customer_address}\n📞 هاتف الزبون: {customer_phone}"
     
     merchant_link = send_whatsapp_alert(merchant_phone, merchant_msg)
     driver_link = send_whatsapp_alert(driver_phone_number, driver_msg)
@@ -223,19 +225,16 @@ with tab_orders:
 
                 c_phone_str = str(c_phone or "")
                 
-                # البحث عن رقم السائق المعين لإرسال رسالة الواتساب له
+                # جلب هاتف السائق المعين
                 selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
                 drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                # توليد روابط واتساب الإدارة (التاجر + السائق + الزبون)
+                # توليد روابط واتساب الإدارة (التاجر + السائق) حسب طلبك بدقة
                 url_store, url_driver = process_new_order_admin(
                     details or "", 
                     drv_phone_str, 
-                    oid, 
-                    c_name or "", 
                     c_phone_str, 
-                    c_address or "", 
-                    total or 0
+                    c_address or ""
                 )
                 
                 wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
