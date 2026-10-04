@@ -20,14 +20,14 @@ def process_new_order_admin(customer_order_text, driver_phone_number, customer_p
     """
     دالة الإدارة لتجهيز رسائل الواتساب:
     - للتاجر: وصف الطلب الحرفي فقط.
-    - للسائق: توجيهه للتاجر المحدد (بالاسم ورقم الهاتف والعنوان) مع رقم هاتف الزبون وعنوانه.
+    - للسائق: توجيه دقيق لاسم المتجر الفعلي (مثل جوانا) مع تفاصيل الزبون.
     """
     admin_merchant_phone = "962797088219"
     
     # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
     merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق (تتضمن تفاصيل التاجر وتفاصيل الزبون)
+    # 2. رسالة السائق (تتضمن اسم المتجر المحدد بدقة مثل جوانا وهاتفه وعنوانه)
     driver_msg = (
         f"بوابة الكرك للطلبات ترحب بكم، ارجو التحرك لاستلام الطلب من التاجر التالي:\n"
         f"🏬 اسم المتجر: {merchant_name}\n"
@@ -192,7 +192,7 @@ with tab_orders:
         drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
         
-        # جلب بيانات المتاجر لمعرفة اسم ورقم وهاتف التاجر المرتبط بالطلب إن وجد
+        # جلب بيانات المتاجر لاستخراج اسم المتجر الحقيقي (مثل جوانا)
         merchants_data = sb.table("merchants").select("name, phone, location").execute().data or []
 
         if orders:
@@ -207,14 +207,15 @@ with tab_orders:
                 payment = ord_item.get("payment_method")
                 assigned_driver_current = ord_item.get("driver_name")
                 
-                # استخراج اسم المتجر من تفاصيل الطلب أو استخدام أول متجر كافتراضي
+                # استخراج اسم المتجر وهاتفه وعنوانه بدقة من تفاصيل الطلب أو بيانات المتاجر
                 m_name_extracted = "متجر بوابة الكرك"
                 m_phone_extracted = "0797088219"
                 m_loc_extracted = "الكرك"
                 
                 for m in merchants_data:
-                    if m["name"] and m["name"] in str(details):
-                        m_name_extracted = m["name"]
+                    m_n = m.get("name", "")
+                    if m_n and (m_n in str(details) or f"[{m_n}]" in str(details) or f"المتجر: {m_n}" in str(details)):
+                        m_name_extracted = m_n
                         m_phone_extracted = m.get("phone", "0797088219")
                         m_loc_extracted = m.get("location", "الكرك")
                         break
@@ -252,7 +253,7 @@ with tab_orders:
                 selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
                 drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                # توليد روابط واتساب الإدارة (التاجر + السائق مع تفاصيل التاجر والزبون)
+                # توليد روابط واتساب الإدارة (مع اسم المتجر المستخرج مثل جوانا)
                 url_store, url_driver = process_new_order_admin(
                     details or "", 
                     drv_phone_str, 
