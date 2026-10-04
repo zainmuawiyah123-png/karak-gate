@@ -9,7 +9,7 @@ from supabase import create_client
 
 
 # ============================================================
-# دالة إرسال رسائل الواتساب (الإدارة) حسب الطلب بدقة
+# دالة إرسال رسائل الواتساب (الإدارة) وتوجيه السائق لاسم التاجر بدقة
 # ============================================================
 def send_whatsapp_alert(phone_number, message_text):
     encoded_message = urllib.parse.quote(message_text)
@@ -20,22 +20,23 @@ def process_new_order_admin(customer_order_text, driver_phone_number, customer_p
     """
     دالة الإدارة لتجهيز رسائل الواتساب:
     - للتاجر: وصف الطلب الحرفي فقط.
-    - للسائق: توجيه دقيق لاسم المتجر الفعلي (مثل جوانا) مع تفاصيل الزبون.
+    - للسائق: إبراز اسم المتجر الفعلي (مثل جوانا) وهاتفه وعنوانه بوضوح تام في المقدمة.
     """
     admin_merchant_phone = "962797088219"
     
     # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
     merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق (تتضمن اسم المتجر المحدد بدقة مثل جوانا وهاتفه وعنوانه)
+    # 2. رسالة السائق (ذكر اسم المتجر الحقيقي وصريحه مثل جوانا بوضوح)
     driver_msg = (
-        f"بوابة الكرك للطلبات ترحب بكم، ارجو التحرك لاستلام الطلب من التاجر التالي:\n"
+        f"🚨 يرجى التوجه فوراً لاستلام الطلب من:\n"
         f"🏬 اسم المتجر: {merchant_name}\n"
-        f"📞 هاتف التاجر: {merchant_phone}\n"
-        f"📍 عنوان/موقع التاجر: {merchant_location}\n\n"
-        f"معلومات التوصيل للزبون:\n"
-        f"📍 عنوان الزبون: {customer_address}\n"
-        f"📞 هاتف الزبون: {customer_phone}"
+        f"📞 هاتف المتجر: {merchant_phone}\n"
+        f"📍 موقع/عنوان المتجر: {merchant_location}\n\n"
+        f"📋 تفاصيل الطلب:\n{customer_order_text}\n\n"
+        f"📍 تفاصيل توصيل الزبون:\n"
+        f"👤 الهاتف: {customer_phone}\n"
+        f"📍 العنوان: {customer_address}"
     )
     
     merchant_link = send_whatsapp_alert(admin_merchant_phone, merchant_msg)
@@ -192,7 +193,7 @@ with tab_orders:
         drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
         
-        # جلب بيانات المتاجر لاستخراج اسم المتجر الحقيقي (مثل جوانا)
+        # جلب المتاجر من قاعدة البيانات لاستخراج اسم المحل ورقم هاتفه
         merchants_data = sb.table("merchants").select("name, phone, location").execute().data or []
 
         if orders:
@@ -203,22 +204,32 @@ with tab_orders:
                 c_address = ord_item.get("customer_address")
                 total = ord_item.get("total_amount")
                 status = ord_item.get("order_status", "قيد التجهيز")
-                details = ord_item.get("order_details")
+                details = ord_item.get("order_details", "")
                 payment = ord_item.get("payment_method")
-                assigned_driver_current = ord_item.get("driver_name")
                 
-                # استخراج اسم المتجر وهاتفه وعنوانه بدقة من تفاصيل الطلب أو بيانات المتاجر
+                # استخراج اسم المتجر الحقيقي (مثل جوانا) بدقة من تفاصيل الطلب أو المتاجر المسجلة
                 m_name_extracted = "متجر بوابة الكرك"
                 m_phone_extracted = "0797088219"
-                m_loc_extracted = "الكرك"
+                m_loc_extracted = "الكرك - المرج"
                 
                 for m in merchants_data:
-                    m_n = m.get("name", "")
+                    m_n = m.get("name", "").strip()
                     if m_n and (m_n in str(details) or f"[{m_n}]" in str(details) or f"المتجر: {m_n}" in str(details)):
                         m_name_extracted = m_n
                         m_phone_extracted = m.get("phone", "0797088219")
                         m_loc_extracted = m.get("location", "الكرك")
                         break
+                
+                # احتياطي: لو لم يتم العثور في التفاصيل، نأخذ أول متجر أو نبحث عن الأقواس مثل [جوانا]
+                if m_name_extracted == "متجر بوابة الكرك" and "[" in str(details) and "]" in str(details):
+                    try:
+                        start_idx = str(details).index("[") + 1
+                        end_idx = str(details).index("]")
+                        extracted_candidate = str(details)[start_idx:end_idx].strip()
+                        if extracted_candidate:
+                            m_name_extracted = extracted_candidate
+                    except Exception:
+                        pass
 
                 st.markdown(f"""
                 <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
@@ -248,12 +259,10 @@ with tab_orders:
                             st.error(f"خطأ: {e}")
 
                 c_phone_str = str(c_phone or "")
-                
-                # جلب هاتف السائق المعين
                 selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
                 drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                # توليد روابط واتساب الإدارة (مع اسم المتجر المستخرج مثل جوانا)
+                # توليد روابط واتساب مع تمرير اسم المتجر المستخرج بوضوح (مثل جوانا)
                 url_store, url_driver = process_new_order_admin(
                     details or "", 
                     drv_phone_str, 
@@ -273,7 +282,7 @@ with tab_orders:
                 with w_c2:
                     st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
                 with w_c3:
-                    st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق واتساب</div></a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (اسم المتجر صريح)</div></a>', unsafe_allow_html=True)
 
                 st.markdown("---")
         else:
