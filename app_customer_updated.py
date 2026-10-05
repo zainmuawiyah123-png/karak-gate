@@ -2,6 +2,7 @@ import sys
 import io
 import base64
 from datetime import datetime
+from urllib.parse import quote
 
 import streamlit as st
 from supabase import create_client
@@ -29,6 +30,8 @@ try:
 except Exception:
     pass
 
+
+WHATSAPP_NUMBER = "962797088219"  # +962797088219
 
 # ============================================================
 # إعدادات العروض التسويقية (عدّلها كما تريد)
@@ -314,13 +317,13 @@ if "customer_email" not in st.session_state:
     st.session_state.customer_email = "abu.adi@example.com"
 
 if "customer_address" not in st.session_state:
-    st.session_state.customer_address = "الكرك - المرج"
+    st.session_state.customer_address = ""
 
 if "delivery_notes" not in st.session_state:
     st.session_state.delivery_notes = "يرجى الاتصال عند الوصول"
 
 if "customer_map_link" not in st.session_state:
-    st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+    st.session_state.customer_map_link = ""
 
 if "cart" not in st.session_state:
     st.session_state.cart = []
@@ -362,12 +365,13 @@ def flat_html(html):
 
 def render_top_header(title, subtitle, show_deliver=True):
     cart_count = len(st.session_state.cart)
+    addr_text = (st.session_state.customer_address or "").strip() or "حدّد عنوانك من صفحة حسابي"
     badge_html = f'<div class="kg-bag-badge"><span>{cart_count}</span></div>' if cart_count > 0 else ""
     if show_deliver:
         left_html = f"""
             <div>
                 <div class="kg-deliver-label">التوصيل إلى</div>
-                <div class="kg-deliver-addr">📍 {st.session_state.customer_address}</div>
+                <div class="kg-deliver-addr">📍 {addr_text}</div>
             </div>
         """
     else:
@@ -406,6 +410,42 @@ def render_promos():
         </div>
         """
     st.markdown(flat_html(f'<div class="kg-promo-scroll">{cards}</div>'), unsafe_allow_html=True)
+
+
+# ============================================================
+# دوال واتساب
+# ============================================================
+def build_whatsapp_link(summary, subtotal, delivery, service, total, payment):
+    addr = (st.session_state.customer_address or "").strip() or "غير محدد"
+    notes = (st.session_state.delivery_notes or "").strip() or "-"
+    map_link = (st.session_state.customer_map_link or "").strip() or "-"
+    msg = (
+        "طلب جديد من تطبيق بوابة الكرك\n"
+        f"الاسم: {st.session_state.customer_name}\n"
+        f"الهاتف: {st.session_state.phone}\n"
+        f"العنوان: {addr}\n"
+        f"ملاحظات: {notes}\n"
+        f"رابط الموقع: {map_link}\n"
+        "----------------\n"
+        f"{summary}\n"
+        "----------------\n"
+        f"مجموع الأصناف: {subtotal:.2f} د.أ\n"
+        f"التوصيل: {delivery:.2f} د.أ\n"
+        f"الخدمة: {service:.2f} د.أ\n"
+        f"الإجمالي: {total:.2f} د.أ\n"
+        f"طريقة الدفع: {payment}"
+    )
+    return f"https://wa.me/{WHATSAPP_NUMBER}?text={quote(msg)}"
+
+
+def render_whatsapp_option(summary, subtotal, delivery, service, total, payment):
+    if not (st.session_state.customer_address or "").strip():
+        st.warning("⚠️ يرجى إدخال عنوانك من صفحة «حسابي» قبل تأكيد الطلب.")
+    link = build_whatsapp_link(summary, subtotal, delivery, service, total, payment)
+    st.markdown(
+        f'<a href="{link}" target="_blank" style="display:block; text-align:center; background:#25D366; color:#FFFFFF !important; font-weight:bold; font-size:14px; padding:10px 12px; border-radius:24px; text-decoration:none; margin-top:6px;">📲 أو أرسل الطلب عبر واتساب</a>',
+        unsafe_allow_html=True
+    )
 
 
 # ============================================================
@@ -618,6 +658,8 @@ if st.session_state.nav_tab == "الرئيسية":
                     except Exception as e:
                         st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
+                render_whatsapp_option(summary, subtotal, delivery, service, total, payment)
+
             st.markdown('</div>', unsafe_allow_html=True)
 
     else:
@@ -785,6 +827,8 @@ if st.session_state.nav_tab == "الرئيسية":
                     except Exception as e:
                         st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
+                render_whatsapp_option(summary, subtotal, delivery, service, total, payment)
+
             st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -841,7 +885,8 @@ elif st.session_state.nav_tab == "الطلبات":
                     with col_d2:
                         st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
 
-                st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#6A12C4; color:white; padding:8px 16px; border-radius:20px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
+                if st.session_state.customer_map_link:
+                    st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#6A12C4; color:white; padding:8px 16px; border-radius:20px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
@@ -874,7 +919,7 @@ elif st.session_state.nav_tab == "الحساب":
     st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
     
     st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
-    st.session_state.customer_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي):", value=st.session_state.customer_address)
+    st.session_state.customer_address = st.text_area("تفاصيل العنوان أو المنطقة (المدينة، الحي، الشارع):", value=st.session_state.customer_address)
     st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
 
     st.markdown("📍 **الموقع الجغرافي (ربط رابط خرائط جوجل الفعّال):**")
@@ -888,9 +933,9 @@ elif st.session_state.nav_tab == "الحساب":
             st.markdown('<meta http-equiv="refresh" content="0;url=https://maps.google.com">', unsafe_allow_html=True)
             st.info("💡 تم توجيهك لخرائط جوجل. ابحث عن موقعك، انسخ رابط المشاركة (Share Link)، ثم الصقه في الحقل أعلاه.")
     with map_cols[1]:
-        if st.button("📍 تعيين موقع افتراضي (الكرك - المرج)"):
-            st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-            st.success("✅ تم تعيين موقع المرج - الكرك افتراضياً بنجاح!")
+        if st.button("🧹 مسح رابط الموقع الحالي"):
+            st.session_state.customer_map_link = ""
+            st.success("✅ تم مسح رابط الموقع. الصق رابط موقعك الجديد في الحقل أعلاه.")
             st.rerun()
 
     # معاينة الرابط الفعّال إذا كان موجوداً
@@ -940,10 +985,10 @@ elif st.session_state.nav_tab == "الحساب":
             try:
                 sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
                 st.session_state.customer_name = "أبو عدي"
-                st.session_state.customer_address = "الكرك - المرج"
+                st.session_state.customer_address = ""
                 st.session_state.delivery_notes = ""
                 st.session_state.customer_email = ""
-                st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+                st.session_state.customer_map_link = ""
                 st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
                 st.rerun()
             except Exception as e:
