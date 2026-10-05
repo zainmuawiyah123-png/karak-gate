@@ -677,13 +677,11 @@ elif st.session_state.nav_tab == "الحساب":
             st.success("✅ تم تعيين موقع المرج - الكرك افتراضياً بنجاح!")
             st.rerun()
 
-    # معاينة الرابط الفعّال إذا كان موجوداً
     if st.session_state.customer_map_link:
         st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # أزرار الإجراءات المستقلة
     col_b1, col_b2, col_b3 = st.columns(3)
 
     with col_b1:
@@ -715,20 +713,6 @@ elif st.session_state.nav_tab == "الحساب":
                     },
                     on_conflict="phone"
                 ).execute()
-                st.success("🎉 تم اعتماد الرقم الجديد والمنطقة ورابط الخريطة بنجاح!")
+                st.success("🎉 تمت عملية تحديث الرقم والبيانات بنجاح!")
             except Exception as e:
-                st.error(f"خطأ أثناء تحديث رقم الهاتف أو المنطقة: {e}")
-
-    with col_b3:
-        if st.button("🗑 مسح وحذف الحساب", use_container_width=True):
-            try:
-                sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
-                st.session_state.customer_name = "أبو عدي"
-                st.session_state.customer_address = "الكرك - المرج"
-                st.session_state.delivery_notes = ""
-                st.session_state.customer_email = ""
-                st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-                st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"خطأ أثناء حذف الحساب: {e}")
+                st.error(f"خطأ أثناء العملية: {e}")
