@@ -31,6 +31,16 @@ except Exception:
 
 
 # ============================================================
+# إعدادات العروض التسويقية (عدّلها كما تريد)
+# ============================================================
+PROMO_BANNERS = [
+    {"title": "خصم 20% على أول طلب", "sub": "للعملاء الجدد في الكرك", "tag": "عرض الترحيب", "bg": "linear-gradient(135deg,#7B1FD6,#A24BF0)"},
+    {"title": "توصيل سريع لباب بيتك", "sub": "من متاجر الكرك المعتمدة", "tag": "توصيل سريع", "bg": "linear-gradient(135deg,#FF5A00,#FF8A3D)"},
+    {"title": "اطلب من أكثر من متجر", "sub": "سلة واحدة وفاتورة واحدة", "tag": "جديد", "bg": "linear-gradient(135deg,#5B14A8,#8A2BE2)"},
+]
+
+
+# ============================================================
 # إعداد الصفحة
 # ============================================================
 st.set_page_config(
@@ -52,69 +62,215 @@ st.markdown(
     display: none;
 }
 .stApp {
-    background: linear-gradient(135deg, #F4F6F8 0%, #E9ECEF 100%) !important;
+    background: #FFFFFF !important;
     color: #2D3142 !important;
 }
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0.6rem !important;
     padding-bottom: 3rem !important;
     max-width: 1400px !important;
 }
 h1, h2, h3, h4, h5, h6, p, label, span {
     color: #2D3142 !important;
 }
+
+/* ---------- الأزرار ---------- */
 div[data-testid="column"] .stButton > button {
-    background: #FF5722 !important;
+    background: #FF5A00 !important;
     color: #FFFFFF !important;
-    border-radius: 8px !important;
+    border-radius: 24px !important;
     border: 0 !important;
     font-weight: bold !important;
     font-size: 13px !important;
     padding: 6px 12px !important;
-    min-height: 36px !important;
+    min-height: 38px !important;
     margin: 4px auto 0 auto !important;
     display: block !important;
     width: 100% !important;
+    transition: all 0.2s ease;
 }
+div[data-testid="column"] .stButton > button:hover {
+    background: #E04E00 !important;
+    transform: translateY(-1px);
+}
+.stButton > button {
+    border-radius: 24px !important;
+}
+
+/* ---------- حقول الإدخال ---------- */
+.stTextInput input, .stTextArea textarea {
+    border-radius: 24px !important;
+    border: 1.5px solid #E5DDF3 !important;
+    background: #F7F3FC !important;
+    padding: 10px 16px !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: #7B1FD6 !important;
+    box-shadow: 0 0 0 2px rgba(123,31,214,0.15) !important;
+}
+
+/* ---------- الهيدر البنفسجي ---------- */
 .kg-header {
-    background: linear-gradient(135deg, #E64A19, #FF7043);
-    border-radius: 14px;
-    padding: 14px 18px;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
+    background: linear-gradient(135deg, #6A12C4, #8A2BE2);
+    border-radius: 0 0 28px 28px;
+    padding: 16px 20px 22px 20px;
+    margin: 0 0 15px 0;
+    box-shadow: 0 6px 20px rgba(106,18,196,0.25);
+}
+.kg-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.kg-deliver-label {
+    color: #E9D8FF !important;
+    font-size: 12px;
+    margin: 0;
+}
+.kg-deliver-addr {
+    color: #FFFFFF !important;
+    font-size: 16px;
+    font-weight: 800;
+    margin: 0;
 }
 .kg-header-title {
     color: white !important;
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 800;
     margin: 0;
 }
 .kg-header-sub {
     color: white !important;
     font-size: 12px;
-    margin: 0;
-    opacity: 0.9;
+    margin: 2px 0 0 0;
+    opacity: 0.92;
 }
+.kg-bag {
+    position: relative;
+    background: #FFFFFF;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.kg-bag-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #FF5A00;
+    color: #FFFFFF !important;
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #FFFFFF;
+}
+.kg-bag-badge span { color: #FFFFFF !important; }
+
+/* ---------- بانرات العروض ---------- */
+.kg-promo-scroll {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 4px 2px 12px 2px;
+    margin-bottom: 8px;
+}
+.kg-promo-card {
+    min-width: 270px;
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    flex: 0 0 auto;
+}
+.kg-promo-tag {
+    display: inline-block;
+    background: #D7FF3B;
+    color: #1B1B1B !important;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+}
+.kg-promo-tag span { color: #1B1B1B !important; }
+.kg-promo-title {
+    color: #FFFFFF !important;
+    font-size: 18px;
+    font-weight: 900;
+    margin: 0;
+}
+.kg-promo-sub {
+    color: #FFFFFF !important;
+    font-size: 12px;
+    margin: 4px 0 0 0;
+    opacity: 0.95;
+}
+
+/* ---------- عناوين الأقسام ---------- */
+.kg-section-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: #2D3142 !important;
+    margin: 14px 0 8px 0;
+}
+
+/* ---------- المتاجر ---------- */
 .kg-store-card {
     background: white;
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 15px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-    text-align: center;
-    transition: all 0.3s ease;
+    border-radius: 18px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #ECE6F5;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.04);
+    transition: all 0.25s ease;
 }
 .kg-store-card:hover {
-    border-color: #E64A19;
-    box-shadow: 0 6px 20px rgba(230,74,25,0.15);
+    border-color: #7B1FD6;
+    box-shadow: 0 6px 20px rgba(123,31,214,0.15);
 }
+.kg-store-name {
+    font-size: 17px;
+    font-weight: 900;
+    margin: 2px 0 4px 0;
+    color: #2D3142 !important;
+}
+.kg-chip {
+    display: inline-block;
+    background: #F3EAFD;
+    color: #6A12C4 !important;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin: 2px 4px 2px 0;
+}
+.kg-chip span { color: #6A12C4 !important; }
+.kg-chip-green {
+    background: #D7FF3B;
+    color: #1B1B1B !important;
+}
+.kg-chip-green span { color: #1B1B1B !important; }
+.kg-price {
+    color: #FF5A00 !important;
+    font-weight: 800;
+    font-size: 15px;
+}
+
+/* ---------- السلة ---------- */
 .kg-cart {
-    background: white;
-    border-radius: 16px;
+    background: #FBF8FF;
+    border-radius: 20px;
     padding: 18px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+    border: 1px solid #E5DDF3;
+    box-shadow: 0 4px 20px rgba(106,18,196,0.06);
 }
 </style>
 """,
@@ -197,6 +353,57 @@ def safe_price(value):
 
 
 # ============================================================
+# دالة رسم الهيدر على طراز تطبيقات التوصيل
+# ============================================================
+def render_top_header(title, subtitle, show_deliver=True):
+    cart_count = len(st.session_state.cart)
+    badge_html = f'<div class="kg-bag-badge"><span>{cart_count}</span></div>' if cart_count > 0 else ""
+    if show_deliver:
+        left_html = f"""
+            <div>
+                <div class="kg-deliver-label">التوصيل إلى</div>
+                <div class="kg-deliver-addr">📍 {st.session_state.customer_address}</div>
+            </div>
+        """
+    else:
+        left_html = f"""
+            <div>
+                <div class="kg-header-title">{title}</div>
+                <div class="kg-header-sub">{subtitle}</div>
+            </div>
+        """
+    html = f"""
+    <div class="kg-header">
+        <div class="kg-header-row">
+            {left_html}
+            <div class="kg-bag">🛍{badge_html}</div>
+        </div>
+    """
+    if show_deliver:
+        html += f"""
+        <div style="margin-top:10px;">
+            <div class="kg-header-title">{title}</div>
+            <div class="kg-header-sub">{subtitle}</div>
+        </div>
+        """
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_promos():
+    cards = ""
+    for b in PROMO_BANNERS:
+        cards += f"""
+        <div class="kg-promo-card" style="background:{b['bg']};">
+            <div class="kg-promo-tag"><span>{b['tag']}</span></div>
+            <div class="kg-promo-title">{b['title']}</div>
+            <div class="kg-promo-sub">{b['sub']}</div>
+        </div>
+        """
+    st.markdown(f'<div class="kg-promo-scroll">{cards}</div>', unsafe_allow_html=True)
+
+
+# ============================================================
 # دالة عرض الصور
 # ============================================================
 def display_image(value, width=100, fallback="🛒"):
@@ -274,14 +481,9 @@ with nav_cols[2]:
 # ============================================================
 if st.session_state.nav_tab == "الرئيسية":
 
-    st.markdown(
-        """
-        <div class="kg-header">
-            <div class="kg-header-title">🛒 بوابة الكرك</div>
-            <div class="kg-header-sub">Karak Gate • اطلب ما تريد من متاجر الكرك بكل سهولة</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    render_top_header(
+        "🛒 بوابة الكرك",
+        "Karak Gate • اطلب ما تريد من متاجر الكرك بكل سهولة"
     )
 
     try:
@@ -306,21 +508,25 @@ if st.session_state.nav_tab == "الرئيسية":
 
         with left_m:
             st.markdown(f"""
-            <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow:0 4px 15px rgba(0,0,0,0.03); display:flex; align-items:center; gap:15px;">
+            <div style="background:linear-gradient(135deg,#F3EAFD,#FFFFFF); border-radius:20px; padding:20px; margin-bottom:15px; border:1px solid #E5DDF3; box-shadow:0 4px 15px rgba(106,18,196,0.08); display:flex; align-items:center; gap:15px;">
                 <div>
-                    <div style="font-size:24px; font-weight:900; color:#E64A19;">🏬 {mname}</div>
-                    <div style="font-size:13px; color:#64748B; margin-top:4px;">التصنيف: <b>{m_data.get('category','')}</b> | الموقع: {m_data.get('location','')}</div>
+                    <div style="font-size:24px; font-weight:900; color:#6A12C4;">🏬 {mname}</div>
+                    <div style="margin-top:6px;">
+                        <span class="kg-chip"><span>{m_data.get('category','')}</span></span>
+                        <span class="kg-chip"><span>📍 {m_data.get('location','')}</span></span>
+                        <span class="kg-chip kg-chip-green"><span>🛵 توصيل 1.50 د.أ</span></span>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             if m_data.get("map_link"):
-                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
             store_products = [p for p in all_products if p.get("merchant_name") == mname]
 
             if store_products:
-                st.subheader(f"📋 قائمة الأصناف المتوفرة ({len(store_products)} صنف)")
+                st.markdown(f'<div class="kg-section-title">📋 قائمة الأصناف المتوفرة ({len(store_products)} صنف)</div>', unsafe_allow_html=True)
                 
                 for pi, p in enumerate(store_products):
                     item_name = p.get("item_name", "صنف")
@@ -335,7 +541,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     
                     with p_col2:
                         st.markdown(f"<div style='font-size:16px; font-weight:bold; margin-top:5px;'>{item_name}</div>", unsafe_allow_html=True)
-                        st.caption(f"{quantity} {unit} | <span style='color:#E64A19; font-weight:bold; font-size:14px;'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
+                        st.caption(f"{quantity} {unit} | <span class='kg-price'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
                     
                     with p_col3:
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -347,7 +553,7 @@ if st.session_state.nav_tab == "الرئيسية":
                             })
                             st.toast(f"تمت إضافة {item_name} إلى السلة!")
                     
-                    st.markdown("<hr style='margin:10px 0; border:0; border-top:1px solid #F1F5F9;'>", unsafe_allow_html=True)
+                    st.markdown("<hr style='margin:10px 0; border:0; border-top:1px solid #F1ECF8;'>", unsafe_allow_html=True)
             else:
                 st.info("لا توجد أصناف مضافة لهذا المتجر حتى الآن.")
 
@@ -419,7 +625,9 @@ if st.session_state.nav_tab == "الرئيسية":
         if user_input != st.session_state.search_query:
             st.session_state.search_query = user_input
 
-        st.subheader("📁 الأقسام الرئيسية")
+        render_promos()
+
+        st.markdown('<div class="kg-section-title">📁 الأقسام الرئيسية</div>', unsafe_allow_html=True)
         
         cols_per_row = 4
         for i in range(0, len(categories), cols_per_row):
@@ -429,16 +637,17 @@ if st.session_state.nav_tab == "الرئيسية":
                 c_name = cat["name"]
                 c_img = cat["image"]
                 is_sel = (st.session_state.selected_category == c_name)
-                border_color = "#E64A19" if is_sel else "#E2E8F0"
-                bg_color = "#FFF8F5" if is_sel else "#FFFFFF"
-                shadow_style = "box-shadow: 0 4px 15px rgba(230,74,25,0.2);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.03);"
+                ring = "3px solid #7B1FD6" if is_sel else "3px solid #F1ECF8"
+                label_color = "#6A12C4" if is_sel else "#2D3142"
+                bg_color = "#F3EAFD" if is_sel else "#F7F3EE"
+                shadow_style = "box-shadow: 0 4px 14px rgba(123,31,214,0.25);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
                 
                 with c_cols[j]:
                     st.markdown(
                         f"""
-                        <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 16px; padding: 12px 6px; text-align: center; margin-bottom: 10px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                            <img src="{c_img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 50%; margin-bottom: 6px; border: 2px solid #F1F5F9; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            <div style="font-weight: 800; font-size: 12px; color: #2D3142; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                        <div style="background: {bg_color}; border-radius: 20px; padding: 14px 6px 10px 6px; text-align: center; margin-bottom: 8px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                            <img src="{c_img}" style="width: 62px; height: 62px; object-fit: cover; border-radius: 50%; margin-bottom: 8px; border: {ring};">
+                            <div style="font-weight: 800; font-size: 12px; color: {label_color}; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -454,7 +663,7 @@ if st.session_state.nav_tab == "الرئيسية":
         left, right = st.columns([2.2, 1], gap="large")
 
         with left:
-            st.subheader("🏬 المتاجر المعتمدة (اضغط على أي متجر لاستعراض أصنافه)")
+            st.markdown('<div class="kg-section-title">🏬 المتاجر المعتمدة (اضغط على أي متجر لاستعراض أصنافه)</div>', unsafe_allow_html=True)
 
             if st.session_state.selected_category == "الكل":
                 filtered_merchants = all_merchants
@@ -496,9 +705,19 @@ if st.session_state.nav_tab == "الرئيسية":
                     
                     with s_cols[sj]:
                         st.markdown('<div class="kg-store-card">', unsafe_allow_html=True)
-                        display_image(store.get("image_data"), width=90, fallback="🏬")
-                        st.markdown(f"<div style='font-size:18px; font-weight:900; margin:10px 0 4px 0;'>{sname}</div>", unsafe_allow_html=True)
-                        st.caption(f"التصنيف: {scat} | الموقع: {sloc}")
+                        img_col, info_col = st.columns([1, 1.6])
+                        with img_col:
+                            display_image(store.get("image_data"), width=90, fallback="🏬")
+                        with info_col:
+                            st.markdown(
+                                f"""
+                                <div class="kg-store-name">{sname}</div>
+                                <span class="kg-chip"><span>{scat}</span></span>
+                                <span class="kg-chip"><span>📍 {sloc}</span></span>
+                                <span class="kg-chip kg-chip-green"><span>🛵 توصيل 1.50 د.أ</span></span>
+                                """,
+                                unsafe_allow_html=True
+                            )
                         
                         if st.button(f"🛒 تصفح أصناف {sname}", key=f"enter_store_{mi+sj}", use_container_width=True):
                             st.session_state.selected_merchant = sname
@@ -568,14 +787,10 @@ if st.session_state.nav_tab == "الرئيسية":
 # 2. الطلبات وتتبع الرحلة
 # ============================================================
 elif st.session_state.nav_tab == "الطلبات":
-    st.markdown(
-        """
-        <div class="kg-header">
-            <div class="kg-header-title">📦 طلباتي ومتابعة رحلة التوصيل</div>
-            <div class="kg-header-sub">تابع حالة طلبك خطوة بخطوة من التجهيز وحتى الوصول</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    render_top_header(
+        "📦 طلباتي ومتابعة رحلة التوصيل",
+        "تابع حالة طلبك خطوة بخطوة من التجهيز وحتى الوصول",
+        show_deliver=False
     )
 
     try:
@@ -593,14 +808,14 @@ elif st.session_state.nav_tab == "الطلبات":
                     current_step_idx = 1
                 
                 st.markdown(f"""
-                <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                <div style="background:white; border-radius:20px; padding:20px; margin-bottom:15px; border:1px solid #E5DDF3; box-shadow: 0 4px 15px rgba(106,18,196,0.06);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <span style="font-size:16px; font-weight:900; color:#E64A19;">رقم الطلب: #{ord_item.get('id')}</span>
-                        <span style="background:#FFF3EE; color:#E64A19; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
+                        <span style="font-size:16px; font-weight:900; color:#6A12C4;">رقم الطلب: #{ord_item.get('id')}</span>
+                        <span style="background:#D7FF3B; color:#1B1B1B; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
                     </div>
                     <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>وقت الطلب:</b> {ord_item.get('created_at')}</p>
                     <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>المبلغ الإجمالي:</b> {ord_item.get('total_amount')} د.أ</p>
-                    <hr style="margin:10px 0; border:0; border-top:1px solid #F1F5F9;">
+                    <hr style="margin:10px 0; border:0; border-top:1px solid #F1ECF8;">
                 """, unsafe_allow_html=True)
                 
                 st.markdown("📍 **رحلة الطلب المباشرة:**")
@@ -608,9 +823,9 @@ elif st.session_state.nav_tab == "الطلبات":
                 for s_idx, s_name in enumerate(steps):
                     with prog_cols[s_idx]:
                         if s_idx <= current_step_idx:
-                            st.markdown(f"<div style='background:#E64A19; color:white; padding:6px; border-radius:8px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:#7B1FD6; color:white; padding:6px; border-radius:20px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
                         else:
-                            st.markdown(f"<div style='background:#F1F5F9; color:#94A3B8; padding:6px; border-radius:8px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:#F1ECF8; color:#94A3B8; padding:6px; border-radius:20px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
                 
                 if current_step_idx >= 1:
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -621,7 +836,7 @@ elif st.session_state.nav_tab == "الطلبات":
                     with col_d2:
                         st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
 
-                st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#0F172A; color:white; padding:6px 12px; border-radius:6px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#6A12C4; color:white; padding:8px 16px; border-radius:20px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
@@ -642,14 +857,10 @@ elif st.session_state.nav_tab == "الطلبات":
 # 3. الحساب وعنوان التوصيل مع ربط الخريطة الفعّال
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
-    st.markdown(
-        """
-        <div class="kg-header">
-            <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك، تحديد موقعك الجغرافي برابط خرائط جوجل، أو إدارة حسابك بكل سهولة</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    render_top_header(
+        "👤 حسابي وعنوان التوصيل",
+        "قم بتحديث معلوماتك، تحديد موقعك الجغرافي برابط خرائط جوجل، أو إدارة حسابك بكل سهولة",
+        show_deliver=False
     )
 
     st.session_state.customer_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
@@ -679,7 +890,7 @@ elif st.session_state.nav_tab == "الحساب":
 
     # معاينة الرابط الفعّال إذا كان موجوداً
     if st.session_state.customer_map_link:
-        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#F3EAFD; border:1px solid #7B1FD6; border-radius:12px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
