@@ -2,42 +2,11 @@ import sys
 import io
 import base64
 from datetime import datetime
+import re
 import urllib.parse
 
 import streamlit as st
 from supabase import create_client
-
-
-# ============================================================
-# دالة إرسال رسائل الواتساب (الإدارة)
-# ============================================================
-def send_whatsapp_alert(phone_number, message_text):
-    encoded_message = urllib.parse.quote(message_text)
-    whatsapp_url = f"https://wa.me/{phone_number}?text={encoded_message}"
-    return whatsapp_url
-
-def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address, merchant_name, merchant_phone, merchant_location, delivery_fee, total_amount):
-    admin_merchant_phone = "962797088219"
-    
-    merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
-    
-    driver_msg = (
-        f"🚨 يرجى التوجه فوراً لاستلام الطلب من:\n"
-        f"🏬 اسم المتجر: {merchant_name}\n"
-        f"📞 هاتف المتجر: {merchant_phone}\n"
-        f"📍 موقع/عنوان المتجر: {merchant_location}\n\n"
-        f"📋 تفاصيل الطلب:\n{customer_order_text}\n\n"
-        f"💰 أجور التوصيل للمتجر: {delivery_fee:.2f} د.أ\n"
-        f"💵 إجمالي الطلب المطلوب تحصيله: {total_amount:.2f} د.أ\n\n"
-        f"📍 تفاصيل توصيل الزبون:\n"
-        f"👤 الهاتف: {customer_phone}\n"
-        f"📍 العنوان: {customer_address}"
-    )
-    
-    merchant_link = send_whatsapp_alert(admin_merchant_phone, merchant_msg)
-    driver_link = send_whatsapp_alert(driver_phone_number, driver_msg)
-    
-    return merchant_link, driver_link
 
 
 # ============================================================
@@ -152,6 +121,42 @@ tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers,
 
 
 # ============================================================
+# أجور التوصيل: حفظ حقول المتجر بأمان
+# ============================================================
+FEE_COLUMNS_SQL = """alter table merchants add column if not exists delivery_fee numeric default 1.50;
+alter table merchants add column if not exists fee_per_km numeric default 0;
+alter table merchants add column if not exists lat double precision;
+alter table merchants add column if not exists lng double precision;"""
+
+
+def to_float_or_none(value):
+    try:
+        text = str(value or "").strip()
+        return float(text) if text else None
+    except Exception:
+        return None
+
+
+def save_merchant(op, base_payload, fee_payload, merchant_id=None):
+    """يحفظ بيانات المتجر مع أجور التوصيل. إذا كانت الأعمدة غير موجودة يحفظ البيانات الأساسية ويعرض تنبيهاً.
+    يرجع True إذا نجح الحفظ كاملاً."""
+    def run(payload):
+        if op == "update":
+            sb.table("merchants").update(payload).eq("id", merchant_id).execute()
+        else:
+            sb.table("merchants").insert(payload).execute()
+
+    try:
+        run({**base_payload, **fee_payload})
+        return True
+    except Exception:
+        run(base_payload)
+        st.warning("تم حفظ بيانات المتجر، لكن أعمدة أجور التوصيل غير موجودة في Supabase. نفّذ هذا الأمر في SQL Editor ثم احفظ مرة أخرى:")
+        st.code(FEE_COLUMNS_SQL, language="sql")
+        return False
+
+
+# ============================================================
 # دالة معالجة الصور
 # ============================================================
 def handle_image_input(uploaded_file, url_input):
@@ -171,7 +176,7 @@ def handle_image_input(uploaded_file, url_input):
 # 1. الطلبات والتنبيهات
 # ============================================================
 with tab_orders:
-    st.subheader("📦 متابعة الطلبات الواردة وتحديد أجور التوصيل")
+    st.subheader("📦 متابعة الطلبات الواردة والتنبيهات")
     
     st.markdown(
         """
@@ -185,145 +190,68 @@ with tab_orders:
 
     try:
         orders = sb.table("orders").select("*").order("id", desc=True).execute().data or []
-        drivers_data = sb.table("drivers").select("name, phone").execute().data or []
+        drivers_data = sb.table("drivers").select("name").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
-        
-        try:
-            merchants_data = sb.table("merchants").select("*").execute().data or []
-        except Exception:
-            merchants_data = []
 
         if orders:
-            sub_o_tabs = st.tabs(["🔴 قيد التجهيز / جديدة", "🔵 جاري التوصيل", "🟢 المكتملة", "⚪ الكل"])
-            
-            new_or_prep_orders = [o for o in orders if o.get("order_status", "قيد التجهيز") in ["قيد التجهيز", ""]]
-            delivering_orders = [o for o in orders if o.get("order_status") == "جاري التوصيل"]
-            completed_orders = [o for o in orders if o.get("order_status") in ["تم التوصيل", "ملغي"]]
-            
-            tab_containers = [sub_o_tabs[0], sub_o_tabs[1], sub_o_tabs[2], sub_o_tabs[3]]
-            lists_to_render = [new_or_prep_orders, delivering_orders, completed_orders, orders]
-            
-            for t_idx, current_orders_list in enumerate(lists_to_render):
-                with tab_containers[t_idx]:
-                    if not current_orders_list:
-                        st.info("لا توجد طلبات في هذا القسم حالياً.")
-                        continue
-                        
-                    for ord_item in current_orders_list:
-                        oid = ord_item.get("id")
-                        c_name = ord_item.get("customer_name")
-                        c_phone = ord_item.get("customer_phone")
-                        c_address = ord_item.get("customer_address")
-                        base_total = float(ord_item.get("total_amount") or 0.0)
-                        status = ord_item.get("order_status", "قيد التجهيز")
-                        details = ord_item.get("order_details", "")
-                        payment = ord_item.get("payment_method")
-                        created_at = ord_item.get("created_at", "غير محدد")
-                        
-                        m_name_extracted = "متجر بوابة الكرك"
-                        m_phone_extracted = "0797088219"
-                        m_loc_extracted = "الكرك - المرج"
-                        default_merchant_fee = 1.50
-                        
-                        for m in merchants_data:
-                            m_n = m.get("name", "").strip()
-                            if m_n and (m_n in str(details) or f"[{m_n}]" in str(details) or f"المتجر: {m_n}" in str(details)):
-                                m_name_extracted = m_n
-                                m_phone_extracted = m.get("phone", "0797088219")
-                                m_loc_extracted = m.get("location", "الكرك")
-                                try:
-                                    default_merchant_fee = float(m.get("delivery_fee", 1.50) or 1.50)
-                                except Exception:
-                                    default_merchant_fee = 1.50
-                                break
-                        
-                        if m_name_extracted == "متجر بوابة الكرك" and "[" in str(details) and "]" in str(details):
-                            try:
-                                start_idx = str(details).index("[") + 1
-                                end_idx = str(details).index("]")
-                                extracted_candidate = str(details)[start_idx:end_idx].strip()
-                                if extracted_candidate:
-                                    m_name_extracted = extracted_candidate
-                            except Exception:
-                                pass
+            for ord_item in orders:
+                oid = ord_item.get("id")
+                c_name = ord_item.get("customer_name")
+                c_phone = ord_item.get("customer_phone")
+                c_address = ord_item.get("customer_address")
+                total = ord_item.get("total_amount")
+                status = ord_item.get("order_status", "قيد التجهيز")
+                details = ord_item.get("order_details")
+                payment = ord_item.get("payment_method")
 
-                        st.markdown(f"""
-                        <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b>
-                                <span style="font-size:11px; color:#666;">🕒 وقت الطلب: {created_at}</span>
-                            </div>
-                            <span style="display:block; margin-top:5px;">📍 عنوان الزبون: {c_address}</span>
-                            <span style="display:block; margin-top:3px;">🏬 المتجر المرتبط: <b>{m_name_extracted}</b></span>
-                            <span style="display:block; margin-top:3px;">💰 قيمة المنتجات: <b>{base_total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b><br>
+                    <span>📍 العنوان: {c_address}</span><br>
+                    <span>💰 الإجمالي: <b>{total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
+                    <pre style="background:#F8F9FA; padding:8px; border-radius:6px; margin-top:8px;">{details}</pre>
+                </div>
+                """, unsafe_allow_html=True)
 
-                        with st.expander(f"📋 تفاصيل أصناف الطلب #{oid} ونسخ النص", expanded=False):
-                            st.text_area(f"النص الخام للطلب #{oid}", value=details, height=80, key=f"raw_txt_unique_{t_idx}_{oid}")
+                col_stat, col_drv, col_tot, col_wa = st.columns([2, 2, 1.6, 2])
+                with col_stat:
+                    new_status = st.selectbox("تحديث الحالة:", ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"], key=f"st_{oid}")
+                with col_drv:
+                    assigned_driver = st.selectbox("تعيين سائق:", drivers_list, key=f"drv_{oid}")
+                with col_tot:
+                    try:
+                        cur_total_val = float(total or 0)
+                    except Exception:
+                        cur_total_val = 0.0
+                    new_total = st.number_input("الإجمالي النهائي (د.أ):", min_value=0.0, step=0.25, value=cur_total_val, key=f"tot_{oid}")
+                with col_wa:
+                    st.write("")
+                    if st.button("💾 تحديث الطلب", key=f"upd_ord_{oid}", use_container_width=True):
+                        try:
+                            sb.table("orders").update({
+                                "order_status": new_status,
+                                "driver_name": assigned_driver,
+                                "total_amount": new_total
+                            }).eq("id", oid).execute()
+                            st.success("تم تحديث الطلب بنجاح!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"خطأ: {e}")
 
-                        col_fee, col_stat, col_drv = st.columns([2, 2, 2])
-                        with col_fee:
-                            custom_delivery_fee = st.number_input(
-                                "أجور التوصيل (د.أ):", 
-                                min_value=0.0, 
-                                value=default_merchant_fee, 
-                                step=0.25, 
-                                key=f"fee_unique_{t_idx}_{oid}", 
-                                help="أجور التوصيل الافتراضية للمتجر، ويمكن تعديلها حسب المسافة"
-                            )
-                        with col_stat:
-                            new_status = st.selectbox(
-                                "تحديث الحالة:", 
-                                ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"], 
-                                key=f"st_unique_{t_idx}_{oid}", 
-                                index=["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"].index(status) if status in ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"] else 0
-                            )
-                        with col_drv:
-                            assigned_driver = st.selectbox("تعيين سائق:", drivers_list, key=f"drv_unique_{t_idx}_{oid}")
+                c_phone_str = str(c_phone or "")
+                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
+                wa_msg_store = f"تنبيه طلب جديد رقم #{oid} للزبون {c_name} ({c_phone_str}). العنوان: {c_address}. الإجمالي: {total} د.أ"
+                
+                url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
+                url_store = f"https://wa.me/962797088219?text={urllib.parse.quote(wa_msg_store)}"
 
-                        final_order_total = base_total + custom_delivery_fee
+                w_c1, w_c2 = st.columns(2)
+                with w_c1:
+                    st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
+                with w_c2:
+                    st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للمتجر واتساب (0797088219)</div></a>', unsafe_allow_html=True)
 
-                        if st.button(f"💾 حفظ واعتماد الفاتورة وتحديث الطلب #{oid}", key=f"btn_upd_unique_{t_idx}_{oid}", use_container_width=True):
-                            try:
-                                sb.table("orders").update({
-                                    "order_status": new_status,
-                                    "driver_name": assigned_driver,
-                                    "total_amount": final_order_total
-                                }).eq("id", oid).execute()
-                                st.success("تم اعتماد الفاتورة وتحديث الطلب بنجاح!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"خطأ: {e}")
-
-                        c_phone_str = str(c_phone or "")
-                        selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
-                        drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
-
-                        url_store, url_driver = process_new_order_admin(
-                            details or "", 
-                            drv_phone_str, 
-                            c_phone_str, 
-                            c_address or "",
-                            m_name_extracted,
-                            m_phone_extracted,
-                            m_loc_extracted,
-                            custom_delivery_fee,
-                            final_order_total
-                        )
-                        
-                        wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، أجور التوصيل: {custom_delivery_fee} د.أ والإجمالي الكلي للفاتورة: {final_order_total} د.أ، حالته الآن: {new_status}."
-                        url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
-
-                        w_c1, w_c2, w_c3 = st.columns(3)
-                        with w_c1:
-                            st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون بالفاتورة</div></a>', unsafe_allow_html=True)
-                        with w_c2:
-                            st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
-                        with w_c3:
-                            st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (مع التوصيل)</div></a>', unsafe_allow_html=True)
-
-                        st.markdown("---")
+                st.markdown("---")
         else:
             st.info("لا توجد طلبات واردة حالياً.")
     except Exception as e:
@@ -334,7 +262,7 @@ with tab_orders:
 # 2. المتاجر
 # ============================================================
 with tab_merchants:
-    st.subheader("🏬 إدارة المتاجر الشاملة وتحديد أجور التوصيل الافتراضية")
+    st.subheader("🏬 إدارة المتاجر الشاملة")
     
     sub_m_tab1, sub_m_tab2 = st.tabs(["تعديل / حذف متجر قائم", "إضافة متجر جديد"])
     
@@ -356,12 +284,24 @@ with tab_merchants:
                         e_cat = st.selectbox("التصنيف:", categories_list, index=categories_list.index(cur_m.get("category")) if cur_m.get("category") in categories_list else 0)
                         e_phone = st.text_input("رقم الهاتف:", value=cur_m.get("phone", ""))
                         e_loc = st.text_input("الموقع الوصفي:", value=cur_m.get("location", ""))
-                        
-                        e_del_fee = st.number_input("أجور التوصيل الافتراضية للمتجر (د.أ):", min_value=0.0, value=float(cur_m.get("delivery_fee", 1.50) or 1.50), step=0.25)
-                        
                         e_map = st.text_input("رابط موقع المتجر (Google Maps URL):", value=map_link_val)
+
+                        st.markdown("**🛵 أجور التوصيل لهذا المتجر**")
+                        fee_c1, fee_c2 = st.columns(2)
+                        with fee_c1:
+                            e_fee = st.number_input("الأجرة الأساسية (د.أ):", min_value=0.0, step=0.25, value=float(cur_m.get("delivery_fee") if cur_m.get("delivery_fee") is not None else 1.50))
+                        with fee_c2:
+                            e_fee_km = st.number_input("أجرة إضافية لكل كم (0 = أجرة ثابتة):", min_value=0.0, step=0.05, value=float(cur_m.get("fee_per_km") or 0.0))
+                        ll_c1, ll_c2 = st.columns(2)
+                        with ll_c1:
+                            e_lat = st.text_input("خط العرض Lat (اختياري):", value="" if cur_m.get("lat") is None else str(cur_m.get("lat")))
+                        with ll_c2:
+                            e_lng = st.text_input("خط الطول Lng (اختياري):", value="" if cur_m.get("lng") is None else str(cur_m.get("lng")))
+                        st.caption("إذا تركت الإحداثيات فارغة يحاول النظام استخراج موقع المتجر من رابط خرائط جوجل. الإحداثيات المكتوبة أدق خصوصاً مع الروابط القصيرة.")
+                        
                         e_img_url = st.text_input("رابط الصورة الحالي أو الجديد (URL):", value=cur_m.get("image_data", ""))
                         e_img_file = st.file_uploader("أو ارفع صورة جديدة للمتجر:", type=["jpg", "png", "jpeg"], key=f"file_m_{cur_m['id']}")
+
                         e_status = st.selectbox("الحالة:", ["معتمد", "قيد المراجعة", "موقف"], index=0)
 
                         col_sv, col_dl = st.columns(2)
@@ -377,24 +317,24 @@ with tab_merchants:
                             safe_e_map = str(e_map or "").strip()
                             final_img = handle_image_input(e_img_file, e_img_url)
                             
-                            update_payload = {
+                            base_payload = {
                                 "name": safe_e_name, 
                                 "category": e_cat, 
                                 "phone": safe_e_phone,
-                                "location": safe_e_loc,
+                                "location": safe_e_loc, 
                                 "map_link": safe_e_map,
                                 "image_data": final_img, 
                                 "status": e_status
                             }
-                            try:
-                                update_payload["delivery_fee"] = e_del_fee
-                                sb.table("merchants").update(update_payload).eq("id", cur_m["id"]).execute()
-                            except Exception:
-                                update_payload.pop("delivery_fee", None)
-                                sb.table("merchants").update(update_payload).eq("id", cur_m["id"]).execute()
-
-                            st.success("تم تحديث المتجر بنجاح!")
-                            st.rerun()
+                            fee_payload = {
+                                "delivery_fee": e_fee,
+                                "fee_per_km": e_fee_km,
+                                "lat": to_float_or_none(e_lat),
+                                "lng": to_float_or_none(e_lng)
+                            }
+                            if save_merchant("update", base_payload, fee_payload, cur_m["id"]):
+                                st.success("تم تحديث المتجر بنجاح!")
+                                st.rerun()
 
                         if dl_btn:
                             sb.table("merchants").delete().eq("id", cur_m["id"]).execute()
@@ -412,8 +352,20 @@ with tab_merchants:
             n_cat = st.selectbox("التصنيف:", categories_list, key="new_cat_store")
             n_phone = st.text_input("الهاتف:", "079xxxxxxx")
             n_loc = st.text_input("الموقع الوصفي:", "الكرك - المرج")
-            n_del_fee = st.number_input("أجور التوصيل الافتراضية للمتجر (د.أ):", min_value=0.0, value=1.50, step=0.25)
             n_map = st.text_input("رابط موقع المتجر (Google Maps URL):", "")
+
+            st.markdown("**🛵 أجور التوصيل لهذا المتجر**")
+            nf_c1, nf_c2 = st.columns(2)
+            with nf_c1:
+                n_fee = st.number_input("الأجرة الأساسية (د.أ):", min_value=0.0, step=0.25, value=1.50, key="new_store_fee")
+            with nf_c2:
+                n_fee_km = st.number_input("أجرة إضافية لكل كم (0 = أجرة ثابتة):", min_value=0.0, step=0.05, value=0.0, key="new_store_fee_km")
+            nl_c1, nl_c2 = st.columns(2)
+            with nl_c1:
+                n_lat = st.text_input("خط العرض Lat (اختياري):", "", key="new_store_lat")
+            with nl_c2:
+                n_lng = st.text_input("خط الطول Lng (اختياري):", "", key="new_store_lng")
+            
             n_img_url = st.text_input("رابط صورة المتجر (URL):", "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80")
             n_img_file = st.file_uploader("أو رفع ملف صورة المتجر:", type=["jpg", "png", "jpeg"], key="new_m_file")
 
@@ -430,7 +382,8 @@ with tab_merchants:
             else:
                 try:
                     final_n_img = handle_image_input(n_img_file, n_img_url)
-                    insert_payload = {
+                    
+                    base_payload = {
                         "name": safe_n_name, 
                         "category": n_cat, 
                         "phone": safe_n_phone,
@@ -439,15 +392,15 @@ with tab_merchants:
                         "image_data": final_n_img, 
                         "status": "معتمد"
                     }
-                    try:
-                        insert_payload["delivery_fee"] = n_del_fee
-                        sb.table("merchants").insert(insert_payload).execute()
-                    except Exception:
-                        insert_payload.pop("delivery_fee", None)
-                        sb.table("merchants").insert(insert_payload).execute()
-                    
-                    st.success("تمت إضافة المتجر بنجاح!")
-                    st.rerun()
+                    fee_payload = {
+                        "delivery_fee": n_fee,
+                        "fee_per_km": n_fee_km,
+                        "lat": to_float_or_none(n_lat),
+                        "lng": to_float_or_none(n_lng)
+                    }
+                    if save_merchant("insert", base_payload, fee_payload):
+                        st.success("تمت إضافة المتجر بنجاح!")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"فشل حفظ المتجر بسبب الخطأ التالي: {e}")
 
@@ -456,7 +409,8 @@ with tab_merchants:
 # 3. أصناف المتاجر
 # ============================================================
 with tab_products:
-    st.subheader("📋 إدارة أصناف ومنتجات المتاجر")
+    st.subheader("📋 إدارة أصناف ومنتجات المتاجر (إضافة، تعديل، حذف)")
+
     sub_p_tab1, sub_p_tab2 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد"])
 
     try:
@@ -483,6 +437,7 @@ with tab_products:
                             up_p_price = st.number_input("السعر (د.أ):", value=float(cur_p.get("price") or 0.0), step=0.25)
                             up_p_qty = st.text_input("الكمية:", value=str(cur_p.get("quantity", "1")))
                             up_p_unit = st.text_input("الوحدة:", value=str(cur_p.get("unit", "حبة")))
+                            
                             up_p_url = st.text_input("رابط الصورة الحالي (URL):", value=str(cur_p.get("image_path", "")))
                             up_p_file = st.file_uploader("أو رفع صورة جديدة للصنف:", type=["jpg", "png", "jpeg"], key=f"file_p_{cur_p['id']}")
 
@@ -526,7 +481,8 @@ with tab_products:
                 prod_name = st.text_input("اسم الصنف أو الوجبة:")
                 prod_price = st.number_input("السعر (د.أ):", min_value=0.0, value=1.00, step=0.25)
                 prod_qty = st.text_input("الكمية أو الحجم:", "1")
-                prod_unit = st.text_input("الوحدة:", "حبة")
+                prod_unit = st.text_input("الوحدة (كغ، حبة، طبق، إلخ):", "حبة")
+                
                 prod_url = st.text_input("رابط صورة الصنف (URL):", "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80")
                 prod_file = st.file_uploader("أو رفع ملف صورة الصنف:", type=["jpg", "png", "jpeg"], key="new_p_file")
 
@@ -550,7 +506,7 @@ with tab_products:
                                 "unit": safe_prod_unit,
                                 "image_path": final_prod_img
                             }).execute()
-                            st.success(f"🎉 تمت إضافة الصنف '{safe_prod_name}' بنجاح!")
+                            st.success(f"🎉 تمت إضافة الصنف '{safe_prod_name}' إلى متجر {prod_merchant} بنجاح!")
                         except Exception as e:
                             st.error(f"خطأ: {e}")
 
@@ -559,7 +515,8 @@ with tab_products:
 # 4. إدارة السائقين
 # ============================================================
 with tab_drivers:
-    st.subheader("🛵 إدارة السائقين")
+    st.subheader("🛵 إدارة السائقين (تعديل، حذف، إضافة، ورابط الموقع)")
+
     d_tab1, d_tab2 = st.tabs(["تعديل / حذف / مواقع السائقين", "إضافة سائق جديد"])
 
     with d_tab1:
@@ -588,10 +545,14 @@ with tab_drivers:
                             del_d_btn = st.form_submit_button("🗑 حذف السائق")
 
                         if save_d_btn:
+                            safe_ud_name = str(ud_name or "").strip()
+                            safe_ud_phone = str(ud_phone or "").strip()
+                            safe_ud_map = str(ud_map or "").strip()
+                            
                             sb.table("drivers").update({
-                                "name": str(ud_name or "").strip(),
-                                "phone": str(ud_phone or "").strip(),
-                                "map_link": str(ud_map or "").strip(),
+                                "name": safe_ud_name,
+                                "phone": safe_ud_phone,
+                                "map_link": safe_ud_map,
                                 "status": ud_status
                             }).eq("id", cur_d["id"]).execute()
                             st.success("تم تحديث بيانات وموقع السائق بنجاح!")
@@ -604,7 +565,7 @@ with tab_drivers:
             else:
                 st.info("لا يوجد سائقون مسجلون بعد.")
         except Exception:
-            st.info("سيتم تفعيل سجل السائقين تلقائياً عند إضافة أول سائق.")
+            st.info("سيتم تفعيل سجل السائقين والمواقع تلقائياً عند إضافة أول سائق.")
 
     with d_tab2:
         st.markdown('<a href="https://www.google.com/maps" target="_blank"><div style="background:#4285F4; color:white; padding:10px; border-radius:8px; text-align:center; font-weight:bold; margin-bottom:15px;">🗺 افتح خرائط جوجل وانسخ رابط الموقع (Google Maps)</div></a>', unsafe_allow_html=True)
@@ -615,13 +576,17 @@ with tab_drivers:
             
             if st.form_submit_button("➕ إضافة السائق للنظام"):
                 try:
+                    safe_new_d_name = str(new_d_name or "").strip()
+                    safe_new_d_phone = str(new_d_phone or "").strip()
+                    safe_new_d_map = str(new_d_map or "").strip()
+                    
                     sb.table("drivers").insert({
-                        "name": str(new_d_name or "").strip(),
-                        "phone": str(new_d_phone or "").strip(),
-                        "map_link": str(new_d_map or "").strip(),
+                        "name": safe_new_d_name,
+                        "phone": safe_new_d_phone,
+                        "map_link": safe_new_d_map,
                         "status": "متاح"
                     }).execute()
-                    st.success("تمت إضافة السائق بنجاح!")
+                    st.success("تمت إضافة السائق وموقعه بنجاح!")
                     st.rerun()
                 except Exception as ex:
                     st.error(f"خطأ: {ex}")
@@ -636,7 +601,7 @@ with tab_customers:
         customers = sb.table("customers").select("*").execute().data or []
         if customers:
             for cust in customers:
-                cust_map = cust.get('map_link') or "#"
+                cust_map = cust.get('map_link') or f"https://www.google.com/maps?q={cust.get('lat')},{cust.get('lng')}" if cust.get('lat') else "#"
                 st.markdown(f"""
                 <div style="background:white; border-radius:10px; padding:12px; margin-bottom:8px; border:1px solid #ddd;">
                     <b>👤 الاسم: {cust.get('name')}</b><br>
@@ -648,7 +613,7 @@ with tab_customers:
         else:
             st.info("لا توجد سجلات زبائن محفوظة بعد.")
     except Exception:
-        st.info("لا يوجد جدول customers مفعل حالياً.")
+        st.info("لا يوجد جدول customers مفعل حالياً أو لا توجد بيانات.")
 
 
 # ============================================================
@@ -657,11 +622,12 @@ with tab_customers:
 with tab_offers:
     st.subheader("🏷 إدارة العروض والتخفيضات للمتاجر")
     with st.form("add_offer_form"):
-        offer_title = st.text_input("عنوان العرض:")
-        offer_store = st.text_input("اسم المتجر:")
-        offer_desc = st.text_area("تفاصيل العرض:")
+        offer_title = st.text_input("عنوان العرض (مثال: خصم 20% على وجبات الغداء):")
+        offer_store = st.text_input("اسم المتجر المقدم للعرض:")
+        offer_desc = st.text_area("تفاصيل العرض والشروط:")
+        
         if st.form_submit_button("📢 نشر العرض في التطبيق"):
-            st.success("🎉 تم نشر العرض بنجاح!")
+            st.success(f"🎉 تم نشر العرض '{offer_title}' بنجاح لمتجر {offer_store}!")
 
 
 # ============================================================
@@ -670,17 +636,27 @@ with tab_offers:
 with tab_finance:
     st.subheader("📊 التقرير المالي الشامل")
     try:
-        orders = sb.table("orders").select("total_amount, created_at").execute().data or []
+        orders = sb.table("orders").select("total_amount, created_at, order_details").execute().data or []
         total_sales = sum(float(o.get("total_amount") or 0) for o in orders)
         total_orders_count = len(orders)
-        
-        col1, col2 = st.columns(2)
+        def order_delivery_fee(o):
+            # الأجرة المسجلة داخل تفاصيل الطلب، وللطلبات القديمة الأجرة الافتراضية 1.50
+            m = re.search(r"التوصيل:\s*([\d.]+)", str(o.get("order_details") or ""))
+            return float(m.group(1)) if m else 1.50
+
+        estimated_delivery_revenue = sum(order_delivery_fee(o) for o in orders)
+        estimated_service_revenue = total_orders_count * 0.25
+
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("إجمالي قيمة الطلبات", f"{total_sales:.2f} د.أ")
         with col2:
-            st.metric("عدد الطلبات الكلي", total_orders_count)
+            st.metric("أرباح التوصيل المتوقعة", f"{estimated_delivery_revenue:.2f} د.أ")
+        with col3:
+            st.metric("أرباح خدمات التطبيق", f"{estimated_service_revenue:.2f} د.أ")
 
         st.markdown("---")
+        st.write("📈 **تفاصيل العمليات المالية المسجلة:**")
         if orders:
             for o in orders:
                 st.write(f"- مبلغ الطلب: **{o.get('total_amount')} د.أ** | التاريخ: {o.get('created_at')}")
