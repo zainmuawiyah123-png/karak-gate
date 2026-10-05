@@ -276,6 +276,12 @@ div[data-testid="column"] .stButton > button:hover {
     box-shadow: 0 4px 20px rgba(106,18,196,0.06);
 }
 
+/* ---------- زر واتساب ---------- */
+[class*="st-key-submit_wa_"] button {
+    background: #25D366 !important;
+    color: #FFFFFF !important;
+}
+
 /* ---------- بطاقة القسم: إطار بحجم المحتوى (الحاسوب) ---------- */
 .kg-cat-card {
     width: 112px !important;
@@ -374,19 +380,19 @@ except Exception:
 # Session State
 # ============================================================
 if "phone" not in st.session_state:
-    st.session_state.phone = "0790000000"
+    st.session_state.phone = ""
 
 if "customer_name" not in st.session_state:
-    st.session_state.customer_name = "أبو عدي"
+    st.session_state.customer_name = ""
 
 if "customer_email" not in st.session_state:
-    st.session_state.customer_email = "abu.adi@example.com"
+    st.session_state.customer_email = ""
 
 if "customer_address" not in st.session_state:
     st.session_state.customer_address = ""
 
 if "delivery_notes" not in st.session_state:
-    st.session_state.delivery_notes = "يرجى الاتصال عند الوصول"
+    st.session_state.delivery_notes = ""
 
 if "customer_map_link" not in st.session_state:
     st.session_state.customer_map_link = ""
@@ -405,6 +411,9 @@ if "search_input_key" not in st.session_state:
 
 if "selected_merchant" not in st.session_state:
     st.session_state.selected_merchant = None
+
+if "wa_pending_link" not in st.session_state:
+    st.session_state.wa_pending_link = None
 
 query_params = st.query_params
 if "cat" in query_params:
@@ -504,14 +513,59 @@ def build_whatsapp_link(summary, subtotal, delivery, service, total, payment):
     return f"https://wa.me/{WHATSAPP_NUMBER}?text={quote(msg)}"
 
 
-def render_whatsapp_option(summary, subtotal, delivery, service, total, payment):
+def missing_fields():
+    miss = []
+    if not (st.session_state.customer_name or "").strip():
+        miss.append("الاسم")
+    if not (st.session_state.phone or "").strip():
+        miss.append("رقم الهاتف")
     if not (st.session_state.customer_address or "").strip():
-        st.warning("⚠️ يرجى إدخال عنوانك من صفحة «حسابي» قبل تأكيد الطلب.")
-    link = build_whatsapp_link(summary, subtotal, delivery, service, total, payment)
+        miss.append("العنوان")
+    return miss
+
+
+def order_ready():
+    miss = missing_fields()
+    if miss:
+        st.error("⚠️ يرجى إكمال بياناتك من صفحة «حسابي» قبل إرسال الطلب: " + "، ".join(miss))
+        return False
+    return True
+
+
+def insert_order(summary, total, payment):
+    sb.table("orders").insert({
+        "customer_name": st.session_state.customer_name,
+        "customer_phone": st.session_state.phone,
+        "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
+        "order_details": summary,
+        "total_amount": total,
+        "payment_method": payment,
+        "order_status": "قيد التجهيز",
+        "driver_name": "",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }).execute()
+
+
+def render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="main"):
+    miss = missing_fields()
+    if miss:
+        st.warning("⚠️ أكمل بياناتك من صفحة «حسابي» قبل الإرسال: " + "، ".join(miss))
     st.markdown(
-        f'<a href="{link}" target="_blank" style="display:block; text-align:center; background:#25D366; color:#FFFFFF !important; font-weight:bold; font-size:14px; padding:10px 12px; border-radius:24px; text-decoration:none; margin-top:6px;">📲 أو أرسل الطلب عبر واتساب</a>',
+        "<div style='text-align:center; font-size:12px; color:#64748B; margin:6px 0;'>— أو —</div>",
         unsafe_allow_html=True
     )
+    if st.button("📲 تسجيل الطلب وإرساله عبر واتساب", key=f"submit_wa_{key_suffix}", use_container_width=True):
+        if not order_ready():
+            return
+        link = build_whatsapp_link(summary, subtotal, delivery, service, total, payment)
+        try:
+            insert_order(summary, total, payment)
+        except Exception as e:
+            st.error(f"خطأ أثناء إرسال الطلب: {e}")
+            return
+        st.session_state.wa_pending_link = link
+        st.session_state.cart = []
+        st.rerun()
 
 
 # ============================================================
@@ -596,6 +650,16 @@ if st.session_state.nav_tab == "الرئيسية":
         "🛒 بوابة الكرك",
         "Karak Gate • اطلب ما تريد من متاجر الكرك بكل سهولة"
     )
+
+    if st.session_state.wa_pending_link:
+        st.success("🎉 تم تسجيل طلبك في النظام بنجاح! اضغط الزر الأخضر لإرسال تفاصيله إلى واتساب الإدارة.")
+        st.markdown(
+            f'<a href="{st.session_state.wa_pending_link}" target="_blank" style="display:block; text-align:center; background:#25D366; color:#FFFFFF !important; font-weight:bold; font-size:15px; padding:12px; border-radius:24px; text-decoration:none; margin:6px 0 10px 0;">📲 افتح واتساب وأرسل الرسالة للإدارة</a>',
+            unsafe_allow_html=True
+        )
+        if st.button("✖ إخفاء هذه الرسالة", key="close_wa_pending"):
+            st.session_state.wa_pending_link = None
+            st.rerun()
 
     try:
         merchants_res = sb.table("merchants").select("*").execute()
@@ -704,7 +768,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.markdown("---")
                 summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
                 
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True):
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True) and order_ready():
                     try:
                         sb.table("orders").insert({
                             "customer_name": st.session_state.customer_name,
@@ -724,7 +788,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     except Exception as e:
                         st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
-                render_whatsapp_option(summary, subtotal, delivery, service, total, payment)
+                render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="store")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -873,7 +937,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.markdown("---")
                 summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
                 
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True):
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True) and order_ready():
                     try:
                         sb.table("orders").insert({
                             "customer_name": st.session_state.customer_name,
@@ -893,7 +957,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     except Exception as e:
                         st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
-                render_whatsapp_option(summary, subtotal, delivery, service, total, payment)
+                render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="main")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -909,7 +973,8 @@ elif st.session_state.nav_tab == "الطلبات":
     )
 
     try:
-        orders = sb.table("orders").select("*").eq("customer_phone", st.session_state.phone).order("id", desc=True).execute().data or []
+        phone_now = (st.session_state.phone or "").strip()
+        orders = (sb.table("orders").select("*").eq("customer_phone", phone_now).order("id", desc=True).execute().data or []) if phone_now else []
         if orders:
             for ord_item in orders:
                 status = ord_item.get('order_status', 'قيد التجهيز')
@@ -961,7 +1026,7 @@ elif st.session_state.nav_tab == "الطلبات":
         else:
             info_col1, info_col2 = st.columns([4, 1])
             with info_col1:
-                st.info("لا توجد طلبات سابقة مسجلة برقم هاتفك الحالي.")
+                st.info("لا توجد طلبات سابقة مسجلة برقم هاتفك الحالي." if phone_now else "أدخل رقم هاتفك من صفحة «حسابي» لعرض طلباتك.")
             with info_col2:
                 if st.button("🔄 تحديث الطلبات", use_container_width=True):
                     st.rerun()
@@ -1050,7 +1115,7 @@ elif st.session_state.nav_tab == "الحساب":
         if st.button("🗑 مسح وحذف الحساب", use_container_width=True):
             try:
                 sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
-                st.session_state.customer_name = "أبو عدي"
+                st.session_state.customer_name = ""
                 st.session_state.customer_address = ""
                 st.session_state.delivery_notes = ""
                 st.session_state.customer_email = ""
