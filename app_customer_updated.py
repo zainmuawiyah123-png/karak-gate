@@ -355,6 +355,11 @@ def safe_price(value):
 # ============================================================
 # دالة رسم الهيدر على طراز تطبيقات التوصيل
 # ============================================================
+def flat_html(html):
+    # يزيل الإزاحات والأسطر الفارغة حتى لا يعتبرها Markdown كتلة كود
+    return "".join(line.strip() for line in html.splitlines() if line.strip())
+
+
 def render_top_header(title, subtitle, show_deliver=True):
     cart_count = len(st.session_state.cart)
     badge_html = f'<div class="kg-bag-badge"><span>{cart_count}</span></div>' if cart_count > 0 else ""
@@ -387,7 +392,7 @@ def render_top_header(title, subtitle, show_deliver=True):
         </div>
         """
     html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(flat_html(html), unsafe_allow_html=True)
 
 
 def render_promos():
@@ -400,7 +405,7 @@ def render_promos():
             <div class="kg-promo-sub">{b['sub']}</div>
         </div>
         """
-    st.markdown(f'<div class="kg-promo-scroll">{cards}</div>', unsafe_allow_html=True)
+    st.markdown(flat_html(f'<div class="kg-promo-scroll">{cards}</div>'), unsafe_allow_html=True)
 
 
 # ============================================================
