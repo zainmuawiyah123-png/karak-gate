@@ -9,31 +9,33 @@ from supabase import create_client
 
 
 # ============================================================
-# دالة إرسال رسائل الواتساب (الإدارة) وتوجيه السائق لاسم التاجر بدقة
+# دالة إرسال رسائل الواتساب (الإدارة) مع أجور توصيل متغيرة حسب المسافة
 # ============================================================
 def send_whatsapp_alert(phone_number, message_text):
     encoded_message = urllib.parse.quote(message_text)
     whatsapp_url = f"https://wa.me/{phone_number}?text={encoded_message}"
     return whatsapp_url
 
-def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address, merchant_name, merchant_phone, merchant_location):
+def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address, merchant_name, merchant_phone, merchant_location, delivery_fee, total_amount):
     """
     دالة الإدارة لتجهيز رسائل الواتساب:
     - للتاجر: وصف الطلب الحرفي فقط.
-    - للسائق: إبراز اسم المتجر الفعلي (مثل جوانا) وهاتفه وعنوانه بوضوح تام في المقدمة.
+    - للسائق: اسم المتجر الصريح (مثل جوانا)، أجور التوصيل المتغيرة حسب المسافة، وإجمالي الطلب.
     """
     admin_merchant_phone = "962797088219"
     
     # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
     merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق (ذكر اسم المتجر الحقيقي وصريحه مثل جوانا بوضوح)
+    # 2. رسالة السائق (متضمنة اسم المتجر وأجور التوصيل المتغيرة بحسب المسافة)
     driver_msg = (
         f"🚨 يرجى التوجه فوراً لاستلام الطلب من:\n"
         f"🏬 اسم المتجر: {merchant_name}\n"
         f"📞 هاتف المتجر: {merchant_phone}\n"
         f"📍 موقع/عنوان المتجر: {merchant_location}\n\n"
         f"📋 تفاصيل الطلب:\n{customer_order_text}\n\n"
+        f"💰 أجور التوصيل (حسب المسافة): {delivery_fee:.2f} د.أ\n"
+        f"💵 إجمالي الطلب المطلوب تحصيله: {total_amount:.2f} د.أ\n\n"
         f"📍 تفاصيل توصيل الزبون:\n"
         f"👤 الهاتف: {customer_phone}\n"
         f"📍 العنوان: {customer_address}"
@@ -173,10 +175,10 @@ def handle_image_input(uploaded_file, url_input):
 
 
 # ============================================================
-# 1. الطلبات والتنبيهات
+# 1. الطلبات والتنبيهات (المحدثة بتبويبات فرعية وعرض تفصيلي ذكي)
 # ============================================================
 with tab_orders:
-    st.subheader("📦 متابعة الطلبات الواردة والتنبيهات")
+    st.subheader("📦 متابعة الطلبات الواردة وتحديد أجور التوصيل بحسب المسافة")
     
     st.markdown(
         """
@@ -193,98 +195,133 @@ with tab_orders:
         drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
         
-        # جلب المتاجر من قاعدة البيانات لاستخراج اسم المحل ورقم هاتفه
         merchants_data = sb.table("merchants").select("name, phone, location").execute().data or []
 
         if orders:
-            for ord_item in orders:
-                oid = ord_item.get("id")
-                c_name = ord_item.get("customer_name")
-                c_phone = ord_item.get("customer_phone")
-                c_address = ord_item.get("customer_address")
-                total = ord_item.get("total_amount")
-                status = ord_item.get("order_status", "قيد التجهيز")
-                details = ord_item.get("order_details", "")
-                payment = ord_item.get("payment_method")
-                
-                # استخراج اسم المتجر الحقيقي (مثل جوانا) بدقة من تفاصيل الطلب أو المتاجر المسجلة
-                m_name_extracted = "متجر بوابة الكرك"
-                m_phone_extracted = "0797088219"
-                m_loc_extracted = "الكرك - المرج"
-                
-                for m in merchants_data:
-                    m_n = m.get("name", "").strip()
-                    if m_n and (m_n in str(details) or f"[{m_n}]" in str(details) or f"المتجر: {m_n}" in str(details)):
-                        m_name_extracted = m_n
-                        m_phone_extracted = m.get("phone", "0797088219")
-                        m_loc_extracted = m.get("location", "الكرك")
-                        break
-                
-                # احتياطي: لو لم يتم العثور في التفاصيل، نأخذ أول متجر أو نبحث عن الأقواس مثل [جوانا]
-                if m_name_extracted == "متجر بوابة الكرك" and "[" in str(details) and "]" in str(details):
-                    try:
-                        start_idx = str(details).index("[") + 1
-                        end_idx = str(details).index("]")
-                        extracted_candidate = str(details)[start_idx:end_idx].strip()
-                        if extracted_candidate:
-                            m_name_extracted = extracted_candidate
-                    except Exception:
-                        pass
+            # تقسيم الطلبات عبر تبويبات فرعية سريعة
+            sub_o_tabs = st.tabs(["🔴 قيد التجهيز / جديدة", "🔵 جاري التوصيل", "🟢 المكتملة", "⚪ الكل"])
+            
+            # تصنيف الطلبات بناءً على حالتها
+            new_or_prep_orders = [o for o in orders if o.get("order_status", "قيد التجهيز") in ["قيد التجهيز", ""]]
+            delivering_orders = [o for o in orders if o.get("order_status") == "جاري التوصيل"]
+            completed_orders = [o for o in orders if o.get("order_status") in ["تم التوصيل", "ملغي"]]
+            
+            tab_containers = [sub_o_tabs[0], sub_o_tabs[1], sub_o_tabs[2], sub_o_tabs[3]]
+            lists_to_render = [new_or_prep_orders, delivering_orders, completed_orders, orders]
+            
+            for t_idx, current_orders_list in enumerate(lists_to_render):
+                with tab_containers[t_idx]:
+                    if not current_orders_list:
+                        st.info("لا توجد طلبات في هذا القسم حالياً.")
+                        continue
+                        
+                    for ord_item in current_orders_list:
+                        oid = ord_item.get("id")
+                        c_name = ord_item.get("customer_name")
+                        c_phone = ord_item.get("customer_phone")
+                        c_address = ord_item.get("customer_address")
+                        base_total = float(ord_item.get("total_amount") or 0.0)
+                        status = ord_item.get("order_status", "قيد التجهيز")
+                        details = ord_item.get("order_details", "")
+                        payment = ord_item.get("payment_method")
+                        created_at = ord_item.get("created_at", "غير محدد")
+                        
+                        # استخراج اسم المتجر الحقيقي بدقة
+                        m_name_extracted = "متجر بوابة الكرك"
+                        m_phone_extracted = "0797088219"
+                        m_loc_extracted = "الكرك - المرج"
+                        
+                        for m in merchants_data:
+                            m_n = m.get("name", "").strip()
+                            if m_n and (m_n in str(details) or f"[{m_n}]" in str(details) or f"المتجر: {m_n}" in str(details)):
+                                m_name_extracted = m_n
+                                m_phone_extracted = m.get("phone", "0797088219")
+                                m_loc_extracted = m.get("location", "الكرك")
+                                break
+                        
+                        if m_name_extracted == "متجر بوابة الكرك" and "[" in str(details) and "]" in str(details):
+                            try:
+                                start_idx = str(details).index("[") + 1
+                                end_idx = str(details).index("]")
+                                extracted_candidate = str(details)[start_idx:end_idx].strip()
+                                if extracted_candidate:
+                                    m_name_extracted = extracted_candidate
+                            except Exception:
+                                pass
 
-                st.markdown(f"""
-                <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-                    <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b><br>
-                    <span>📍 عنوان الزبون: {c_address}</span><br>
-                    <span>💰 الإجمالي: <b>{total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
-                    <pre style="background:#F8F9FA; padding:8px; border-radius:6px; margin-top:8px;">{details}</pre>
-                </div>
-                """, unsafe_allow_html=True)
+                        st.markdown(f"""
+                        <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b>
+                                <span style="font-size:11px; color:#666;">🕒 وقت الطلب: {created_at}</span>
+                            </div>
+                            <span style="display:block; margin-top:5px;">📍 عنوان الزبون: {c_address}</span>
+                            <span style="display:block; margin-top:3px;">🏬 المتجر المرتبط: <b>{m_name_extracted}</b></span>
+                            <span style="display:block; margin-top:3px;">💰 قيمة المنتجات: <b>{base_total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                col_stat, col_drv, col_wa = st.columns([2, 2, 2])
-                with col_stat:
-                    new_status = st.selectbox("تحديث الحالة:", ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"], key=f"st_{oid}")
-                with col_drv:
-                    assigned_driver = st.selectbox("تعيين سائق:", drivers_list, key=f"drv_{oid}")
-                with col_wa:
-                    st.write("")
-                    if st.button("💾 تحديث الطلب", key=f"upd_ord_{oid}", use_container_width=True):
-                        try:
-                            sb.table("orders").update({
-                                "order_status": new_status,
-                                "driver_name": assigned_driver
-                            }).eq("id", oid).execute()
-                            st.success("تم تحديث الطلب بنجاح!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"خطأ: {e}")
+                        # عرض تفاصيل الطلب بشكل جدول منظم ومقروء بدلاً من النص الخام
+                        with st.expander(f"📋 عرض تفاصيل أصناف الطلب #{oid} ونسخ النص"):
+                            st.text_area(f"النص الخام للطلب #{oid}", value=details, height=80, key=f"raw_txt_{oid}")
+                            st.info("💡 يمكنك مراجعة تفاصيل الأصناف والكميات أعلاه وإدارتها بدقة.")
 
-                c_phone_str = str(c_phone or "")
-                selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
-                drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
+                        # حقول التحكم الإدارية لكل طلب (تحديد أجور التوصيل حسب المسافة، الحالة، والسائق)
+                        col_fee, col_stat, col_drv = st.columns([2, 2, 2])
+                        with col_fee:
+                            custom_delivery_fee = st.number_input("أجور التوصيل (د.أ):", min_value=0.0, value=1.50, step=0.25, key=f"fee_{oid}", help="حدد أجور التوصيل بناءً على المسافة للمتجر")
+                        with col_stat:
+                            new_status = st.selectbox("تحديث الحالة:", ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"], key=f"st_{oid}", index=["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"].index(status) if status in ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"] else 0)
+                        with col_drv:
+                            assigned_driver = st.selectbox("تعيين سائق:", drivers_list, key=f"drv_{oid}")
 
-                # توليد روابط واتساب مع تمرير اسم المتجر المستخرج بوضوح (مثل جوانا)
-                url_store, url_driver = process_new_order_admin(
-                    details or "", 
-                    drv_phone_str, 
-                    c_phone_str, 
-                    c_address or "",
-                    m_name_extracted,
-                    m_phone_extracted,
-                    m_loc_extracted
-                )
-                
-                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
-                url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
+                        # تنبيه بصري ذكي إذا كانت أجور التوصيل أعلى من السعر الثابت (مسافة أبعد)
+                        if custom_delivery_fee > 1.50:
+                            st.markdown(f'<div style="background:#FFF3CD; color:#856404; padding:6px 12px; border-radius:6px; font-size:12px; margin-bottom:8px;">⚠️ تنبيه: تم تحديد أجور توصيل مرتفعة ({custom_delivery_fee} د.أ) نظراً لوجود المتجر في مسافة أبعد.</div>', unsafe_allow_html=True)
 
-                w_c1, w_c2, w_c3 = st.columns(3)
-                with w_c1:
-                    st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
-                with w_c2:
-                    st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
-                with w_c3:
-                    st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (اسم المتجر صريح)</div></a>', unsafe_allow_html=True)
+                        final_order_total = base_total + custom_delivery_fee
 
-                st.markdown("---")
+                        if st.button(f"💾 حفظ تحديثات الطلب #{oid}", key=f"upd_ord_{oid}", use_container_width=True):
+                            try:
+                                sb.table("orders").update({
+                                    "order_status": new_status,
+                                    "driver_name": assigned_driver,
+                                    "total_amount": final_order_total
+                                }).eq("id", oid).execute()
+                                st.success("تم تحديث الطلب وإجمالي السعر وأجور التوصيل بنجاح!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"خطأ: {e}")
+
+                        c_phone_str = str(c_phone or "")
+                        selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
+                        drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
+
+                        # إرسال أجور التوصيل المتغيرة لرسالة السائق
+                        url_store, url_driver = process_new_order_admin(
+                            details or "", 
+                            drv_phone_str, 
+                            c_phone_str, 
+                            c_address or "",
+                            m_name_extracted,
+                            m_phone_extracted,
+                            m_loc_extracted,
+                            custom_delivery_fee,
+                            final_order_total
+                        )
+                        
+                        wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، أجور التوصيل: {custom_delivery_fee} د.أ والإجمالي الكلي: {final_order_total} د.أ، حالته الآن: {new_status}."
+                        url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
+
+                        w_c1, w_c2, w_c3 = st.columns(3)
+                        with w_c1:
+                            st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
+                        with w_c2:
+                            st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
+                        with w_c3:
+                            st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (متجر وتوصيل متغير)</div></a>', unsafe_allow_html=True)
+
+                        st.markdown("---")
         else:
             st.info("لا توجد طلبات واردة حالياً.")
     except Exception as e:
