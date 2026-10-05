@@ -1,0 +1,16 @@
+{
+  "short_name": "Streamkaraj gate",
+  "name": "karak gate",
+  "icons": [
+    {
+      "src": "kark.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff"
+}
+  https://github.com/zainmuawiyah123-png/karak-gate/blob/main/kark.png
