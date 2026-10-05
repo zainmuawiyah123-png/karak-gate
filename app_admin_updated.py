@@ -17,17 +17,10 @@ def send_whatsapp_alert(phone_number, message_text):
     return whatsapp_url
 
 def process_new_order_admin(customer_order_text, driver_phone_number, customer_phone, customer_address, merchant_name, merchant_phone, merchant_location, delivery_fee, total_amount):
-    """
-    دالة الإدارة لتجهيز رسائل الواتساب:
-    - للتاجر: وصف الطلب الحرفي فقط.
-    - للسائق: اسم المتجر الصريح (مثل جوانا)، أجور التوصيل المتغيرة حسب المسافة، وإجمالي الطلب.
-    """
     admin_merchant_phone = "962797088219"
     
-    # 1. رسالة التاجر (وصف الطلب الحرفي فقط)
     merchant_msg = f"بوابة الكرك للطلبات ترحب بكم، ارجو تجهيز الطلب:\n{customer_order_text}"
     
-    # 2. رسالة السائق (متضمنة اسم المتجر وأجور التوصيل المتغيرة بحسب المسافة)
     driver_msg = (
         f"🚨 يرجى التوجه فوراً لاستلام الطلب من:\n"
         f"🏬 اسم المتجر: {merchant_name}\n"
@@ -175,10 +168,10 @@ def handle_image_input(uploaded_file, url_input):
 
 
 # ============================================================
-# 1. الطلبات والتنبيهات (المحدثة بتبويبات فرعية وعرض تفصيلي ذكي)
+# 1. الطلبات والتنبيهات (التحكم بأجور النقل للمتجر وتحديث الفاتورة فوراً)
 # ============================================================
 with tab_orders:
-    st.subheader("📦 متابعة الطلبات الواردة وتحديد أجور التوصيل بحسب المسافة")
+    st.subheader("📦 متابعة الطلبات الواردة وتحديد أجور التوصيل بحسب المسافة قبل إصدار الفاتورة")
     
     st.markdown(
         """
@@ -198,10 +191,8 @@ with tab_orders:
         merchants_data = sb.table("merchants").select("name, phone, location").execute().data or []
 
         if orders:
-            # تقسيم الطلبات عبر تبويبات فرعية سريعة
             sub_o_tabs = st.tabs(["🔴 قيد التجهيز / جديدة", "🔵 جاري التوصيل", "🟢 المكتملة", "⚪ الكل"])
             
-            # تصنيف الطلبات بناءً على حالتها
             new_or_prep_orders = [o for o in orders if o.get("order_status", "قيد التجهيز") in ["قيد التجهيز", ""]]
             delivering_orders = [o for o in orders if o.get("order_status") == "جاري التوصيل"]
             completed_orders = [o for o in orders if o.get("order_status") in ["تم التوصيل", "ملغي"]]
@@ -226,7 +217,6 @@ with tab_orders:
                         payment = ord_item.get("payment_method")
                         created_at = ord_item.get("created_at", "غير محدد")
                         
-                        # استخراج اسم المتجر الحقيقي بدقة
                         m_name_extracted = "متجر بوابة الكرك"
                         m_phone_extracted = "0797088219"
                         m_loc_extracted = "الكرك - المرج"
@@ -261,34 +251,31 @@ with tab_orders:
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # عرض تفاصيل الطلب بشكل جدول منظم ومقروء بدلاً من النص الخام
-                        with st.expander(f"📋 عرض تفاصيل أصناف الطلب #{oid} ونسخ النص"):
-                            st.text_area(f"النص الخام للطلب #{oid}", value=details, height=80, key=f"raw_txt_{oid}")
-                            st.info("💡 يمكنك مراجعة تفاصيل الأصناف والكميات أعلاه وإدارتها بدقة.")
+                        with st.expander(f"📋 تفاصيل أصناف الطلب #{oid} ونسخ النص"):
+                            st.text_area(f"النص الخام للطلب #{oid}", value=details, height=80, key=f"raw_txt_order_{oid}")
 
-                        # حقول التحكم الإدارية لكل طلب (تحديد أجور التوصيل حسب المسافة، الحالة، والسائق)
+                        # التحكم بأجور النقل وتعديل الفاتورة فوراً للمتاجر البعيدة
                         col_fee, col_stat, col_drv = st.columns([2, 2, 2])
                         with col_fee:
-                            custom_delivery_fee = st.number_input("أجور التوصيل (د.أ):", min_value=0.0, value=1.50, step=0.25, key=f"fee_{oid}", help="حدد أجور التوصيل بناءً على المسافة للمتجر")
+                            custom_delivery_fee = st.number_input("أجور التوصيل (د.أ):", min_value=0.0, value=1.50, step=0.25, key=f"fee_{oid}", help="حدد أجور التوصيل بناءً على المسافة للمتجر قبل اعتماد الفاتورة والطلب")
                         with col_stat:
                             new_status = st.selectbox("تحديث الحالة:", ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"], key=f"st_{oid}", index=["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"].index(status) if status in ["قيد التجهيز", "جاري التوصيل", "تم التوصيل", "ملغي"] else 0)
                         with col_drv:
                             assigned_driver = st.selectbox("تعيين سائق:", drivers_list, key=f"drv_{oid}")
 
-                        # تنبيه بصري ذكي إذا كانت أجور التوصيل أعلى من السعر الثابت (مسافة أبعد)
                         if custom_delivery_fee > 1.50:
-                            st.markdown(f'<div style="background:#FFF3CD; color:#856404; padding:6px 12px; border-radius:6px; font-size:12px; margin-bottom:8px;">⚠️ تنبيه: تم تحديد أجور توصيل مرتفعة ({custom_delivery_fee} د.أ) نظراً لوجود المتجر في مسافة أبعد.</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div style="background:#FFF3CD; color:#856404; padding:6px 12px; border-radius:6px; font-size:12px; margin-bottom:8px;">⚠️ تنبيه المسافة البعيدة: تم اعتماد أجور توصيل بقيمة ({custom_delivery_fee} د.أ) وستنعكس مباشرة على الفاتورة.</div>', unsafe_allow_html=True)
 
                         final_order_total = base_total + custom_delivery_fee
 
-                        if st.button(f"💾 حفظ تحديثات الطلب #{oid}", key=f"upd_ord_{oid}", use_container_width=True):
+                        if st.button(f"💾 حفظ واعتماد الفاتورة وتحديث الطلب #{oid}", key=f"upd_ord_{oid}", use_container_width=True):
                             try:
                                 sb.table("orders").update({
                                     "order_status": new_status,
                                     "driver_name": assigned_driver,
                                     "total_amount": final_order_total
                                 }).eq("id", oid).execute()
-                                st.success("تم تحديث الطلب وإجمالي السعر وأجور التوصيل بنجاح!")
+                                st.success("تم اعتماد الفاتورة وتحديث أجور التوصيل وإجمالي السعر بنجاح!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"خطأ: {e}")
@@ -297,7 +284,6 @@ with tab_orders:
                         selected_driver_obj = next((d for d in drivers_data if d["name"] == assigned_driver), None)
                         drv_phone_str = str(selected_driver_obj.get("phone", "962790000000") if selected_driver_obj else "962790000000")
 
-                        # إرسال أجور التوصيل المتغيرة لرسالة السائق
                         url_store, url_driver = process_new_order_admin(
                             details or "", 
                             drv_phone_str, 
@@ -310,16 +296,16 @@ with tab_orders:
                             final_order_total
                         )
                         
-                        wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، أجور التوصيل: {custom_delivery_fee} د.أ والإجمالي الكلي: {final_order_total} د.أ، حالته الآن: {new_status}."
+                        wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، أجور التوصيل المحددة حسب المسافة: {custom_delivery_fee} د.أ والإجمالي الكلي للفاتورة: {final_order_total} د.أ، حالته الآن: {new_status}."
                         url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
 
                         w_c1, w_c2, w_c3 = st.columns(3)
                         with w_c1:
-                            st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
+                            st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون بالفاتورة</div></a>', unsafe_allow_html=True)
                         with w_c2:
                             st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للتاجر (0797088219)</div></a>', unsafe_allow_html=True)
                         with w_c3:
-                            st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (متجر وتوصيل متغير)</div></a>', unsafe_allow_html=True)
+                            st.markdown(f'<a href="{url_driver}" target="_blank"><div style="background:#075E54; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للسائق (مع التوصيل المتغير)</div></a>', unsafe_allow_html=True)
 
                         st.markdown("---")
         else:
