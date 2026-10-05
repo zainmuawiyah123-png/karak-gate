@@ -85,7 +85,7 @@ if menu == "الرئيسية (التسوق)":
             continue
         with [col1, col2, col3, col4][i % 4]:
             st.markdown(f"### {product['image']} {product['name']}")
-            st.write(**السعر:** {product['price']} دينار)
+            st.write(f"**السعر:** {product['price']} دينار")
             if st.button(f"أضف للسلة 🛒", key=f"prod_{product['id']}"):
                 st.session_state.cart.append(product)
                 st.success(f"تمت إضافة {product['name']} إلى السلة!")
@@ -130,7 +130,7 @@ elif menu == "عربة التسوق والدفع":
         
         if st.button("إتمام الطلب وتأكيده 🚀", type="primary"):
             if not c_name or not c_phone or not c_address:
-                st.error("يرجى تعبثة كافة بيانات الاسم ورقم الهاتف وعنوان التوصيل بدقة.")
+                st.error("يرجى تعبئة كافة بيانات الاسم ورقم الهاتف وعنوان التوصيل بدقة.")
             else:
                 st.session_state.user = {"name": c_name, "phone": c_phone, "city": c_city, "address": c_address}
                 
@@ -141,7 +141,7 @@ elif menu == "عربة التسوق والدفع":
                     "subtotal": total_price,
                     "delivery_fee": delivery_fee,
                     "total": total_price + delivery_fee,
-                    "status": "قيد المعгляд",
+                    "status": "قيد المعالجة",
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
                 
@@ -151,7 +151,7 @@ elif menu == "عربة التسوق والدفع":
                 st.success(f"تم إرسال طلبك بنجاح! رقم الطلب الخاص بك هو: {new_order['order_id']}")
 
 # 3. تتبع الطلبات
-elif menu == " تتبع الطلبات":
+elif menu == "تتبع الطلبات":
     st.title("📦 تتبع الطلبات")
     search_phone = st.text_input("أدخل رقم الهاتف للبحث عن طلباتك:")
     
@@ -172,7 +172,7 @@ elif menu == " تتبع الطلبات":
 # 4. لوحة إدارة أجور التوصيل
 elif menu == "لوحة إدارة أجور التوصيل":
     st.title("⚙️ لوحة الإدارة - التحكم بأجور التوصيل والمحافظات")
-    st.write("من خلال هذه لوحة التحكم، يمكنك تعديل أجور التوصيل لكل محافظة أو إضافة مدينة جديدة بسهولة:")
+    st.write("من خلال لوحة التحكم هذه، يمكنك تعديل أجور التوصيل لكل محافظة أو إضافة مدينة جديدة بسهولة:")
     
     with st.form("update_delivery_form"):
         updated_fees = {}
