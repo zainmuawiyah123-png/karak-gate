@@ -735,7 +735,7 @@ if st.session_state.nav_tab == "الرئيسية":
         with right_m:
             st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
             st.subheader("🛍 سلة الطلبات والفاتورة")
-
+            
             if not st.session_state.cart:
                 st.info("السلة فارغة حالياً.")
             else:
@@ -745,15 +745,20 @@ if st.session_state.nav_tab == "الرئيسية":
                     st.write(f"🔹 **{item['name']}**")
                     st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
 
-                delivery = 1.50
-                service = 0.25
-                total = subtotal + delivery + service
+                # التحقق من الحد الأدنى للطلب (5 دنانير لمجموع الأصناف فقط)
+                if subtotal < 5.0:
+                    st.markdown("---")
+                    st.warning("⚠️ عذراً، الحد الأدنى للطلب هو 5 دنانير (لا يشمل رسوم الخدمة والتوصيل). يرجى إضافة المزيد من الأصناف للسلة.")
+                else:
+                    delivery = 1.50
+                    service = 0.25
+                    total = subtotal + delivery + service
 
-                st.markdown("---")
-                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
-                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
-                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
-                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+                    st.markdown("---")
+                    st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
+                    st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
+                    st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
+                    st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
 
                 if st.button("🗑 تفريغ السلة", use_container_width=True):
                     st.session_state.cart = []
