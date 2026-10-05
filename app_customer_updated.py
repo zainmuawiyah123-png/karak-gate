@@ -276,6 +276,31 @@ div[data-testid="column"] .stButton > button:hover {
     box-shadow: 0 4px 20px rgba(106,18,196,0.06);
 }
 
+/* ---------- بطاقة القسم: إطار بحجم المحتوى (الحاسوب) ---------- */
+.kg-cat-card {
+    width: 112px !important;
+    height: 106px !important;
+    padding: 8px 4px 6px 4px !important;
+    margin: 0 auto 6px auto !important;
+    border-radius: 16px !important;
+}
+.kg-cat-card img {
+    width: 56px !important;
+    height: 56px !important;
+    margin-bottom: 5px !important;
+}
+.kg-cat-name {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+    max-height: 26px;
+    overflow: hidden;
+}
+div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) .stButton {
+    max-width: 112px;
+    margin: 0 auto;
+}
+
 /* ---------- الأقسام على الهاتف: 4 في الصف وبطاقات مصغّرة ---------- */
 @media (max-width: 640px) {
     div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) {
@@ -287,7 +312,11 @@ div[data-testid="column"] .stButton > button:hover {
         width: calc(25% - 6px) !important;
         min-width: calc(25% - 6px) !important;
     }
+    div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) .stButton {
+        max-width: 100%;
+    }
     .kg-cat-card {
+        width: 100% !important;
         height: 96px !important;
         padding: 8px 2px 6px 2px !important;
         border-radius: 14px !important;
