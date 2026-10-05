@@ -2,7 +2,9 @@ import sys
 import io
 import base64
 from datetime import datetime
-from urllib.parse import quote
+import re
+import math
+from urllib.parse import quote, unquote
 
 import streamlit as st
 from supabase import create_client
@@ -32,6 +34,9 @@ except Exception:
 
 
 WHATSAPP_NUMBER = "962797088219"  # +962797088219
+
+DEFAULT_DELIVERY_FEE = 1.50   # الأجرة الافتراضية إذا لم تحددها الإدارة للمتجر
+ROAD_FACTOR = 1.3             # معامل تقريبي لتحويل المسافة المباشرة إلى مسافة طريق
 
 # ============================================================
 # إعدادات العروض التسويقية (عدّلها كما تريد)
@@ -488,6 +493,106 @@ def render_promos():
 
 
 # ============================================================
+# أجور التوصيل (تحددها الإدارة لكل متجر + المسافة)
+# أعمدة اختيارية في جدول merchants:
+#   delivery_fee  : الأجرة الأساسية للمتجر
+#   fee_per_km    : أجرة إضافية لكل كم (0 = أجرة ثابتة)
+#   lat, lng      : إحداثيات المتجر (وإلا تُستخرج من map_link)
+# ============================================================
+@st.cache_data(ttl=3600, show_spinner=False)
+def resolve_map_url(url):
+    url = str(url or "").strip()
+    if not url:
+        return ""
+    if "goo.gl" in url or "maps.app" in url:
+        try:
+            import requests
+            r = requests.get(url, allow_redirects=True, timeout=4)
+            return r.url or url
+        except Exception:
+            return url
+    return url
+
+
+def extract_coords(url):
+    u = unquote(resolve_map_url(url))
+    patterns = [
+        r"@(-?\d+\.\d+),(-?\d+\.\d+)",
+        r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)",
+        r"[?&](?:q|ll|query|destination|center)=(-?\d+\.\d+),\s*(-?\d+\.\d+)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, u)
+        if m:
+            lat, lng = float(m.group(1)), float(m.group(2))
+            if -90 <= lat <= 90 and -180 <= lng <= 180:
+                return (lat, lng)
+    return None
+
+
+def haversine_km(a, b):
+    r = 6371.0
+    la1, lo1, la2, lo2 = map(math.radians, [a[0], a[1], b[0], b[1]])
+    d = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(d))
+
+
+def merchant_coords(m):
+    try:
+        if m.get("lat") is not None and m.get("lng") is not None:
+            return (float(m["lat"]), float(m["lng"]))
+    except Exception:
+        pass
+    return extract_coords(m.get("map_link"))
+
+
+def merchant_fee_info(m):
+    base = m.get("delivery_fee")
+    base = DEFAULT_DELIVERY_FEE if base in (None, "") else safe_price(base)
+    per_km = safe_price(m.get("fee_per_km"))
+    return base, per_km
+
+
+def fee_label(m):
+    base, per_km = merchant_fee_info(m)
+    if per_km > 0:
+        return f"🛵 توصيل من {base:.2f} د.أ"
+    return f"🛵 توصيل {base:.2f} د.أ"
+
+
+def compute_delivery(cart, merchants):
+    by_name = {mm.get("name"): mm for mm in merchants}
+    cust = extract_coords(st.session_state.customer_map_link) if st.session_state.customer_map_link else None
+    total = 0.0
+    lines = []
+    uncertain = False
+    for name in dict.fromkeys(item.get("merchant") for item in cart):
+        m = by_name.get(name) or {}
+        base, per_km = merchant_fee_info(m)
+        fee = base
+        dist = None
+        if per_km > 0:
+            store_xy = merchant_coords(m)
+            if cust and store_xy:
+                dist = haversine_km(cust, store_xy) * ROAD_FACTOR
+                fee = base + per_km * dist
+                fee = math.ceil(fee * 4) / 4  # تقريب لأقرب 0.25
+            else:
+                uncertain = True
+        total += fee
+        lines.append((name, fee, dist))
+    return total, lines, uncertain
+
+
+def render_delivery_details(lines, uncertain):
+    for name, fee, dist in lines:
+        extra = f" ({dist:.1f} كم تقريباً)" if dist is not None else ""
+        st.caption(f"🛵 {name}: {fee:.2f} د.أ{extra}")
+    if uncertain:
+        st.caption("⚠️ تعذّر حساب المسافة (رابط موقعك أو موقع المتجر غير محدد)، فقد تؤكد الإدارة أجرة التوصيل النهائية.")
+
+
+# ============================================================
 # دوال واتساب
 # ============================================================
 def build_whatsapp_link(summary, subtotal, delivery, service, total, payment):
@@ -689,7 +794,7 @@ if st.session_state.nav_tab == "الرئيسية":
                     <div style="margin-top:6px;">
                         <span class="kg-chip"><span>{m_data.get('category','')}</span></span>
                         <span class="kg-chip"><span>📍 {m_data.get('location','')}</span></span>
-                        <span class="kg-chip kg-chip-green"><span>🛵 توصيل 1.50 د.أ</span></span>
+                        <span class="kg-chip kg-chip-green"><span>{fee_label(m_data)}</span></span>
                     </div>
                 </div>
             </div>
@@ -735,7 +840,7 @@ if st.session_state.nav_tab == "الرئيسية":
         with right_m:
             st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
             st.subheader("🛍 سلة الطلبات والفاتورة")
-            
+
             if not st.session_state.cart:
                 st.info("السلة فارغة حالياً.")
             else:
@@ -745,20 +850,16 @@ if st.session_state.nav_tab == "الرئيسية":
                     st.write(f"🔹 **{item['name']}**")
                     st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
 
-                # التحقق من الحد الأدنى للطلب (5 دنانير لمجموع الأصناف فقط)
-                if subtotal < 5.0:
-                    st.markdown("---")
-                    st.warning("⚠️ عذراً، الحد الأدنى للطلب هو 5 دنانير (لا يشمل رسوم الخدمة والتوصيل). يرجى إضافة المزيد من الأصناف للسلة.")
-                else:
-                    delivery = 1.50
-                    service = 0.25
-                    total = subtotal + delivery + service
+                delivery, delivery_lines, delivery_uncertain = compute_delivery(st.session_state.cart, all_merchants)
+                service = 0.25
+                total = subtotal + delivery + service
 
-                    st.markdown("---")
-                    st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
-                    st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
-                    st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
-                    st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+                st.markdown("---")
+                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
+                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
+                render_delivery_details(delivery_lines, delivery_uncertain)
+                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
+                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
 
                 if st.button("🗑 تفريغ السلة", use_container_width=True):
                     st.session_state.cart = []
@@ -896,7 +997,7 @@ if st.session_state.nav_tab == "الرئيسية":
                                 <div class="kg-store-name">{sname}</div>
                                 <span class="kg-chip"><span>{scat}</span></span>
                                 <span class="kg-chip"><span>📍 {sloc}</span></span>
-                                <span class="kg-chip kg-chip-green"><span>🛵 توصيل 1.50 د.أ</span></span>
+                                <span class="kg-chip kg-chip-green"><span>{fee_label(store)}</span></span>
                                 """,
                                 unsafe_allow_html=True
                             )
@@ -919,13 +1020,14 @@ if st.session_state.nav_tab == "الرئيسية":
                     st.write(f"🔹 **{item['name']}**")
                     st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
 
-                delivery = 1.50
+                delivery, delivery_lines, delivery_uncertain = compute_delivery(st.session_state.cart, all_merchants)
                 service = 0.25
                 total = subtotal + delivery + service
 
                 st.markdown("---")
                 st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
                 st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
+                render_delivery_details(delivery_lines, delivery_uncertain)
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
 
