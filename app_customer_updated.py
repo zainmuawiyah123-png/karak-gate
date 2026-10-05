@@ -41,7 +41,7 @@ def process_new_order_admin(customer_order_text, driver_phone_number, customer_p
 
 
 # ============================================================
-# إعداد الصفحة وتحديد وضع التطبيق (زبون / إحالة / إدارة)
+# إعداد الصفحة وتحديد وضع التطبيق (زبون / إدارة)
 # ============================================================
 st.set_page_config(
     page_title="بوابة الطلبات الشاملة",
@@ -127,7 +127,6 @@ if not is_admin_mode:
         selected_merchant_obj = next((m for m in filtered_merchants if m["name"] == chosen_merchant_name), None)
 
         if selected_merchant_obj:
-            # قراءة أجور التوصيل الديناميكية الخاصة بالمتجر من جدول merchants
             try:
                 store_delivery_fee = float(selected_merchant_obj.get("delivery_fee", 1.50) or 1.50)
             except Exception:
@@ -162,7 +161,7 @@ if not is_admin_mode:
                     col_p1, col_p2, col_p3 = st.columns([3, 2, 2])
                     with col_p1:
                         st.write(f"**{p_name}**")
-                        st.caption(fالسعر: {p_price:.2f} د.أ / {p_unit})
+                        st.caption(f"السعر: {p_price:.2f} د.أ / {p_unit}")
                     with col_p2:
                         qty = st.number_input(f"الكمية ({p_name})", min_value=0, max_value=50, value=0, key=f"prod_qty_{p_id}")
                         if qty > 0:
@@ -178,7 +177,7 @@ if not is_admin_mode:
                     for item_name, info in st.session_state.cart.items():
                         item_total = info["price"] * info["qty"]
                         subtotal += item_total
-                        order_summary_lines.append(- {item_name}: {info['qty']} {info['unit']} (الإجمالي: {item_total:.2f} د.أ))
+                        order_summary_lines.append(f"- {item_name}: {info['qty']} {info['unit']} (الإجمالي: {item_total:.2f} د.أ)")
                     
                     final_total_calc = subtotal + store_delivery_fee
                     st.write(f"💰 مجموع المنتجات: **{subtotal:.2f} د.أ**")
@@ -189,7 +188,6 @@ if not is_admin_mode:
                         st.markdown("##### 📍 بيانات التوصيل:")
                         c_name_input = st.text_input("الاسم الكريم:")
                         c_phone_input = st.text_input("رقم الهاتف (مثال: 079xxxxxxx):")
-                        # تم إزالة القيد الجغرافي السابق وأصبح الحقل حراً بالكامل
                         c_address_input = st.text_input("العنوان بالتفصيل (المدينة، المنطقة، الشارع، رقم البناية):", placeholder="مثال: عمان، الدوار السابع، شارع مدحت الحبيب...")
                         c_map_input = st.text_input("رابط موقعك على خرائط جوجل (اختياري - Google Maps URL):", "")
                         c_payment_method = st.selectbox("طريقة الدفع:", ["الدفع نقداً عند الاستلام", "محفظة إلكترونية / زين كاش"])
@@ -206,7 +204,6 @@ if not is_admin_mode:
                             else:
                                 full_details_str = "\n".join(order_summary_lines)
                                 try:
-                                    # حفظ الزبون في جدول customers
                                     try:
                                         sb.table("customers").insert({
                                             "name": safe_c_name,
@@ -217,8 +214,7 @@ if not is_admin_mode:
                                     except Exception:
                                         pass
 
-                                    # حفظ الطلب في جدول orders
-                                    res_order = sb.table("orders").insert({
+                                    sb.table("orders").insert({
                                         "customer_name": safe_c_name,
                                         "customer_phone": safe_c_phone,
                                         "customer_address": safe_c_address,
@@ -269,9 +265,6 @@ else:
 
     tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
 
-    # ------------------------------------------------------------
-    # 1. الطلبات والتنبيهات (إدارة)
-    # ------------------------------------------------------------
     with tab_orders:
         st.subheader("📦 متابعة الطلبات الواردة وتحديد أجور التوصيل")
         
@@ -431,9 +424,6 @@ else:
         except Exception as e:
             st.error(f"تعذر جلب الطلبات: {e}")
 
-    # ------------------------------------------------------------
-    # 2. المتاجر (إدارة)
-    # ------------------------------------------------------------
     with tab_merchants:
         st.subheader("🏬 إدارة المتاجر الشاملة وتحديد أجور التوصيل الافتراضية")
         sub_m_tab1, sub_m_tab2 = st.tabs(["تعديل / حذف متجر قائم", "إضافة متجر جديد"])
@@ -541,9 +531,6 @@ else:
                     except Exception as e:
                         st.error(f"فشل حفظ المتجر بسبب الخطأ التالي: {e}")
 
-    # ------------------------------------------------------------
-    # 3. أصناف المتاجر (إدارة)
-    # ------------------------------------------------------------
     with tab_products:
         st.subheader("📋 إدارة أصناف ومنتجات المتاجر")
         sub_p_tab1, sub_p_tab2 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد"])
@@ -643,9 +630,6 @@ else:
                             except Exception as e:
                                 st.error(f"خطأ: {e}")
 
-    # ------------------------------------------------------------
-    # 4. إدارة السائقين (إدارة)
-    # ------------------------------------------------------------
     with tab_drivers:
         st.subheader("🛵 إدارة السائقين")
         d_tab1, d_tab2 = st.tabs(["تعديل / حذف / مواقع السائقين", "إضافة سائق جديد"])
@@ -714,9 +698,6 @@ else:
                     except Exception as ex:
                         st.error(f"خطأ: {ex}")
 
-    # ------------------------------------------------------------
-    # 5. سجل الزبائن (إدارة)
-    # ------------------------------------------------------------
     with tab_customers:
         st.subheader("👥 سجل الزبائن وعناوينهم المرسلة")
         try:
@@ -737,9 +718,6 @@ else:
         except Exception:
             st.info("لا يوجد جدول customers مفعل حالياً.")
 
-    # ------------------------------------------------------------
-    # 6. إدارة العروض والتخفيضات (إدارة)
-    # ------------------------------------------------------------
     with tab_offers:
         st.subheader("🏷 إدارة العروض والتخفيضات للمتاجر")
         with st.form("add_offer_form"):
@@ -749,9 +727,6 @@ else:
             if st.form_submit_button("📢 نشر العرض في التطبيق"):
                 st.success("🎉 تم نشر العرض بنجاح!")
 
-    # ------------------------------------------------------------
-    # 7. التقرير المالي (إدارة)
-    # ------------------------------------------------------------
     with tab_finance:
         st.subheader("📊 التقرير المالي الشامل")
         try:
