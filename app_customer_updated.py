@@ -275,6 +275,43 @@ div[data-testid="column"] .stButton > button:hover {
     border: 1px solid #E5DDF3;
     box-shadow: 0 4px 20px rgba(106,18,196,0.06);
 }
+
+/* ---------- الأقسام على الهاتف: 4 في الصف وبطاقات مصغّرة ---------- */
+@media (max-width: 640px) {
+    div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) > div {
+        flex: 0 0 calc(25% - 6px) !important;
+        width: calc(25% - 6px) !important;
+        min-width: calc(25% - 6px) !important;
+    }
+    .kg-cat-card {
+        height: 96px !important;
+        padding: 8px 2px 6px 2px !important;
+        border-radius: 14px !important;
+        margin-bottom: 4px !important;
+    }
+    .kg-cat-card img {
+        width: 46px !important;
+        height: 46px !important;
+        margin-bottom: 4px !important;
+    }
+    .kg-cat-name {
+        font-size: 10px !important;
+        line-height: 1.2 !important;
+        white-space: normal !important;
+        max-height: 24px;
+        overflow: hidden;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) .stButton > button {
+        font-size: 10px !important;
+        padding: 2px 0 !important;
+        min-height: 26px !important;
+        margin-top: 0 !important;
+    }
+}
 </style>
 """,
     unsafe_allow_html=True
@@ -692,14 +729,14 @@ if st.session_state.nav_tab == "الرئيسية":
                 with c_cols[j]:
                     st.markdown(
                         f"""
-                        <div style="background: {bg_color}; border-radius: 20px; padding: 14px 6px 10px 6px; text-align: center; margin-bottom: 8px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <div class="kg-cat-card" style="background: {bg_color}; border-radius: 20px; padding: 14px 6px 10px 6px; text-align: center; margin-bottom: 8px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                             <img src="{c_img}" style="width: 62px; height: 62px; object-fit: cover; border-radius: 50%; margin-bottom: 8px; border: {ring};">
-                            <div style="font-weight: 800; font-size: 12px; color: {label_color}; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
+                            <div class="kg-cat-name" style="font-weight: 800; font-size: 12px; color: {label_color}; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
-                    btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
+                    btn_label = "✓" if is_sel else "عرض"
                     if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                         st.session_state.selected_category = c_name
                         st.query_params["cat"] = c_name
