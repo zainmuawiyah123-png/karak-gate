@@ -21,6 +21,16 @@ except Exception:
 
 
 # ============================================================
+# مكتبة تحديد الموقع الجغرافي
+# ============================================================
+try:
+    from streamlit_js_eval import get_geolocation
+    HAS_GEOLOCATION = True
+except Exception:
+    HAS_GEOLOCATION = False
+
+
+# ============================================================
 # إعداد Supabase
 # ============================================================
 SUPABASE_URL = "https://tzkdxodvlzggmcntnqer.supabase.co"
@@ -37,9 +47,11 @@ WHATSAPP_NUMBER = "962797088219"  # +962797088219
 
 DEFAULT_DELIVERY_FEE = 1.50   # الأجرة الافتراضية إذا لم تحددها الإدارة للمتجر
 ROAD_FACTOR = 1.3             # معامل تقريبي لتحويل المسافة المباشرة إلى مسافة طريق
+MIN_ORDER_SUBTOTAL = 5.00     # الحد الأدنى لقيمة الطلب (بدون التوصيل والخدمة)
+
 
 # ============================================================
-# إعدادات العروض التسويقية (عدّلها كما تريد)
+# إعدادات العروض التسويقية
 # ============================================================
 PROMO_BANNERS = [
     {"title": "خصم 20% على أول طلب", "sub": "للعملاء الجدد في الكرك", "tag": "عرض الترحيب", "bg": "linear-gradient(135deg,#7B1FD6,#A24BF0)"},
@@ -287,7 +299,7 @@ div[data-testid="column"] .stButton > button:hover {
     color: #FFFFFF !important;
 }
 
-/* ---------- بطاقة القسم: إطار بحجم المحتوى (الحاسوب) ---------- */
+/* ---------- بطاقة القسم ---------- */
 .kg-cat-card {
     width: 112px !important;
     height: 106px !important;
@@ -312,7 +324,7 @@ div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) .stButton {
     margin: 0 auto;
 }
 
-/* ---------- الأقسام على الهاتف: 4 في الصف وبطاقات مصغّرة ---------- */
+/* ---------- الأقسام على الهاتف ---------- */
 @media (max-width: 640px) {
     div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) {
         flex-wrap: wrap !important;
@@ -402,6 +414,15 @@ if "delivery_notes" not in st.session_state:
 if "customer_map_link" not in st.session_state:
     st.session_state.customer_map_link = ""
 
+if "customer_lat" not in st.session_state:
+    st.session_state.customer_lat = None
+
+if "customer_lng" not in st.session_state:
+    st.session_state.customer_lng = None
+
+if "do_geolocate" not in st.session_state:
+    st.session_state.do_geolocate = False
+
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
@@ -436,10 +457,9 @@ def safe_price(value):
 
 
 # ============================================================
-# دالة رسم الهيدر على طراز تطبيقات التوصيل
+# دالة رسم الهيدر
 # ============================================================
 def flat_html(html):
-    # يزيل الإزاحات والأسطر الفارغة حتى لا يعتبرها Markdown كتلة كود
     return "".join(line.strip() for line in html.splitlines() if line.strip())
 
 
@@ -493,11 +513,7 @@ def render_promos():
 
 
 # ============================================================
-# أجور التوصيل (تحددها الإدارة لكل متجر + المسافة)
-# أعمدة اختيارية في جدول merchants:
-#   delivery_fee  : الأجرة الأساسية للمتجر
-#   fee_per_km    : أجرة إضافية لكل كم (0 = أجرة ثابتة)
-#   lat, lng      : إحداثيات المتجر (وإلا تُستخرج من map_link)
+# أجور التوصيل
 # ============================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def resolve_map_url(url):
@@ -562,7 +578,14 @@ def fee_label(m):
 
 def compute_delivery(cart, merchants):
     by_name = {mm.get("name"): mm for mm in merchants}
-    cust = extract_coords(st.session_state.customer_map_link) if st.session_state.customer_map_link else None
+
+    # أولوية: إحداثيات المتصفح المحفوظة، ثم الرابط اليدوي
+    cust = None
+    if st.session_state.get("customer_lat") and st.session_state.get("customer_lng"):
+        cust = (st.session_state.customer_lat, st.session_state.customer_lng)
+    elif st.session_state.customer_map_link:
+        cust = extract_coords(st.session_state.customer_map_link)
+
     total = 0.0
     lines = []
     uncertain = False
@@ -576,7 +599,7 @@ def compute_delivery(cart, merchants):
             if cust and store_xy:
                 dist = haversine_km(cust, store_xy) * ROAD_FACTOR
                 fee = base + per_km * dist
-                fee = math.ceil(fee * 4) / 4  # تقريب لأقرب 0.25
+                fee = math.ceil(fee * 4) / 4
             else:
                 uncertain = True
         total += fee
@@ -599,6 +622,9 @@ def build_whatsapp_link(summary, subtotal, delivery, service, total, payment):
     addr = (st.session_state.customer_address or "").strip() or "غير محدد"
     notes = (st.session_state.delivery_notes or "").strip() or "-"
     map_link = (st.session_state.customer_map_link or "").strip() or "-"
+    geo_str = "-"
+    if st.session_state.get("customer_lat") and st.session_state.get("customer_lng"):
+        geo_str = f"{st.session_state.customer_lat},{st.session_state.customer_lng}"
     msg = (
         "طلب جديد من تطبيق بوابة الكرك\n"
         f"الاسم: {st.session_state.customer_name}\n"
@@ -606,6 +632,7 @@ def build_whatsapp_link(summary, subtotal, delivery, service, total, payment):
         f"العنوان: {addr}\n"
         f"ملاحظات: {notes}\n"
         f"رابط الموقع: {map_link}\n"
+        f"إحداثيات GPS: {geo_str}\n"
         "----------------\n"
         f"{summary}\n"
         "----------------\n"
@@ -637,11 +664,21 @@ def order_ready():
     return True
 
 
+def check_min_order(cart):
+    """يتحقق أن مجموع الأصناف يحقق الحد الأدنى"""
+    subtotal = sum(safe_price(item.get("price")) for item in cart)
+    return subtotal >= MIN_ORDER_SUBTOTAL, subtotal
+
+
 def insert_order(summary, total, payment):
+    geo_str = ""
+    if st.session_state.get("customer_lat") and st.session_state.get("customer_lng"):
+        geo_str = f" | إحداثيات: {st.session_state.customer_lat},{st.session_state.customer_lng}"
+
     sb.table("orders").insert({
         "customer_name": st.session_state.customer_name,
         "customer_phone": st.session_state.phone,
-        "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
+        "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}{geo_str}",
         "order_details": summary,
         "total_amount": total,
         "payment_method": payment,
@@ -651,15 +688,22 @@ def insert_order(summary, total, payment):
     }).execute()
 
 
-def render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="main"):
+def render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="main", min_ok=True):
     miss = missing_fields()
     if miss:
         st.warning("⚠️ أكمل بياناتك من صفحة «حسابي» قبل الإرسال: " + "، ".join(miss))
+    if not min_ok:
+        st.warning(f"⚠️ لا يمكن الإرسال: الحد الأدنى لقيمة الطلب هو {MIN_ORDER_SUBTOTAL:.2f} د.أ قبل التوصيل والخدمة.")
     st.markdown(
         "<div style='text-align:center; font-size:12px; color:#64748B; margin:6px 0;'>— أو —</div>",
         unsafe_allow_html=True
     )
-    if st.button("📲 تسجيل الطلب وإرساله عبر واتساب", key=f"submit_wa_{key_suffix}", use_container_width=True):
+    if st.button(
+        "📲 تسجيل الطلب وإرساله عبر واتساب",
+        key=f"submit_wa_{key_suffix}",
+        use_container_width=True,
+        disabled=(not min_ok or bool(miss))
+    ):
         if not order_ready():
             return
         link = build_whatsapp_link(summary, subtotal, delivery, service, total, payment)
@@ -801,435 +845,4 @@ if st.session_state.nav_tab == "الرئيسية":
             """, unsafe_allow_html=True)
 
             if m_data.get("map_link"):
-                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
-
-            store_products = [p for p in all_products if p.get("merchant_name") == mname]
-
-            if store_products:
-                st.markdown(f'<div class="kg-section-title">📋 قائمة الأصناف المتوفرة ({len(store_products)} صنف)</div>', unsafe_allow_html=True)
-                
-                for pi, p in enumerate(store_products):
-                    item_name = p.get("item_name", "صنف")
-                    quantity = p.get("quantity", "")
-                    unit = p.get("unit", "")
-                    price = safe_price(p.get("price"))
-
-                    p_col1, p_col2, p_col3 = st.columns([1.2, 3.8, 2])
-                    
-                    with p_col1:
-                        display_image(p.get("image_path"), width=100, fallback="🍽")
-                    
-                    with p_col2:
-                        st.markdown(f"<div style='font-size:16px; font-weight:bold; margin-top:5px;'>{item_name}</div>", unsafe_allow_html=True)
-                        st.caption(f"{quantity} {unit} | <span class='kg-price'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
-                    
-                    with p_col3:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("➕ إضافة للسلة", key=f"add_store_p_{pi}_{p['id']}", use_container_width=True):
-                            st.session_state.cart.append({
-                                "name": f"{item_name} ({quantity} {unit})",
-                                "price": price,
-                                "merchant": mname
-                            })
-                            st.toast(f"تمت إضافة {item_name} إلى السلة!")
-                    
-                    st.markdown("<hr style='margin:10px 0; border:0; border-top:1px solid #F1ECF8;'>", unsafe_allow_html=True)
-            else:
-                st.info("لا توجد أصناف مضافة لهذا المتجر حتى الآن.")
-
-        with right_m:
-            st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
-            st.subheader("🛍 سلة الطلبات والفاتورة")
-
-            if not st.session_state.cart:
-                st.info("السلة فارغة حالياً.")
-            else:
-                subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
-
-                for item in st.session_state.cart:
-                    st.write(f"🔹 **{item['name']}**")
-                    st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
-
-                delivery, delivery_lines, delivery_uncertain = compute_delivery(st.session_state.cart, all_merchants)
-                service = 0.25
-                total = subtotal + delivery + service
-
-                st.markdown("---")
-                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
-                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
-                render_delivery_details(delivery_lines, delivery_uncertain)
-                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
-                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
-
-                if st.button("🗑 تفريغ السلة", use_container_width=True):
-                    st.session_state.cart = []
-                    st.rerun()
-
-                payment = st.radio(
-                    "اختر طريقة الدفع:",
-                    ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
-                    key="pay_store_mode"
-                )
-
-                st.markdown("---")
-                summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
-                summary += f"\n- التوصيل: {delivery:.2f} د.أ"
-                
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True) and order_ready():
-                    try:
-                        sb.table("orders").insert({
-                            "customer_name": st.session_state.customer_name,
-                            "customer_phone": st.session_state.phone,
-                            "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
-                            "order_details": summary,
-                            "total_amount": total,
-                            "payment_method": payment,
-                            "order_status": "قيد التجهيز",
-                            "driver_name": "",
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        }).execute()
-
-                        st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
-                        st.session_state.cart = []
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"خطأ أثناء إرسال الطلب: {e}")
-
-                render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="store")
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    else:
-        user_input = st.text_input(
-            "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
-            value=st.session_state.search_query,
-            key=f"user_search_box_{st.session_state.search_input_key}"
-        )
-        
-        if user_input != st.session_state.search_query:
-            st.session_state.search_query = user_input
-
-        render_promos()
-
-        st.markdown('<div class="kg-section-title">📁 الأقسام الرئيسية</div>', unsafe_allow_html=True)
-        
-        cols_per_row = 4
-        for i in range(0, len(categories), cols_per_row):
-            row_cats = categories[i:i + cols_per_row]
-            c_cols = st.columns(len(row_cats))
-            for j, cat in enumerate(row_cats):
-                c_name = cat["name"]
-                c_img = cat["image"]
-                is_sel = (st.session_state.selected_category == c_name)
-                ring = "3px solid #7B1FD6" if is_sel else "3px solid #F1ECF8"
-                label_color = "#6A12C4" if is_sel else "#2D3142"
-                bg_color = "#F3EAFD" if is_sel else "#F7F3EE"
-                shadow_style = "box-shadow: 0 4px 14px rgba(123,31,214,0.25);" if is_sel else "box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
-                
-                with c_cols[j]:
-                    st.markdown(
-                        f"""
-                        <div class="kg-cat-card" style="background: {bg_color}; border-radius: 20px; padding: 14px 6px 10px 6px; text-align: center; margin-bottom: 8px; {shadow_style} height: 125px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                            <img src="{c_img}" style="width: 62px; height: 62px; object-fit: cover; border-radius: 50%; margin-bottom: 8px; border: {ring};">
-                            <div class="kg-cat-name" style="font-weight: 800; font-size: 12px; color: {label_color}; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">{c_name}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    btn_label = "✓" if is_sel else "عرض"
-                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
-                        st.session_state.selected_category = c_name
-                        st.query_params["cat"] = c_name
-                        st.session_state.search_query = ""
-                        st.session_state.search_input_key += 1
-                        st.rerun()
-
-        left, right = st.columns([2.2, 1], gap="large")
-
-        with left:
-            st.markdown('<div class="kg-section-title">🏬 المتاجر المعتمدة (اضغط على أي متجر لاستعراض أصنافه)</div>', unsafe_allow_html=True)
-
-            if st.session_state.selected_category == "الكل":
-                filtered_merchants = all_merchants
-            else:
-                selected_cat = st.session_state.selected_category.strip()
-                filtered_merchants = [
-                    m for m in all_merchants 
-                    if str(m.get("category", "")).strip() == selected_cat
-                ]
-
-            current_search = st.session_state.search_query.strip()
-            if current_search:
-                s = current_search.lower()
-                matching_merchants_by_product = set()
-                for p in all_products:
-                    if s in str(p.get("item_name") or "").lower():
-                        matching_merchants_by_product.add(p.get("merchant_name"))
-
-                merchants = []
-                for m in filtered_merchants:
-                    mname = str(m.get("name") or "").lower()
-                    mcat = str(m.get("category") or "").lower()
-                    if s in mname or s in mcat or m.get("name") in matching_merchants_by_product:
-                        merchants.append(m)
-            else:
-                merchants = filtered_merchants
-
-            if not merchants:
-                st.info("لا توجد متاجر مطابقة للبحث أو مضافة حالياً في هذا القسم.")
-
-            store_cols_count = 2
-            for mi in range(0, len(merchants), store_cols_count):
-                row_stores = merchants[mi:mi + store_cols_count]
-                s_cols = st.columns(len(row_stores))
-                for sj, store in enumerate(row_stores):
-                    sname = store.get("name", "متجر")
-                    scat = store.get("category", "")
-                    sloc = store.get("location", "")
-                    
-                    with s_cols[sj]:
-                        st.markdown('<div class="kg-store-card">', unsafe_allow_html=True)
-                        img_col, info_col = st.columns([1, 1.6])
-                        with img_col:
-                            display_image(store.get("image_data"), width=90, fallback="🏬")
-                        with info_col:
-                            st.markdown(
-                                f"""
-                                <div class="kg-store-name">{sname}</div>
-                                <span class="kg-chip"><span>{scat}</span></span>
-                                <span class="kg-chip"><span>📍 {sloc}</span></span>
-                                <span class="kg-chip kg-chip-green"><span>{fee_label(store)}</span></span>
-                                """,
-                                unsafe_allow_html=True
-                            )
-                        
-                        if st.button(f"🛒 تصفح أصناف {sname}", key=f"enter_store_{mi+sj}", use_container_width=True):
-                            st.session_state.selected_merchant = sname
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
-
-        with right:
-            st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
-            st.subheader("🛍 سلة الطلبات والفاتورة")
-
-            if not st.session_state.cart:
-                st.info("السلة فارغة حالياً.")
-            else:
-                subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
-
-                for item in st.session_state.cart:
-                    st.write(f"🔹 **{item['name']}**")
-                    st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
-
-                delivery, delivery_lines, delivery_uncertain = compute_delivery(st.session_state.cart, all_merchants)
-                service = 0.25
-                total = subtotal + delivery + service
-
-                st.markdown("---")
-                st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
-                st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
-                render_delivery_details(delivery_lines, delivery_uncertain)
-                st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
-                st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
-
-                if st.button("🗑 تفريغ السلة", key="clear_cart_main", use_container_width=True):
-                    st.session_state.cart = []
-                    st.rerun()
-
-                payment = st.radio(
-                    "اختر طريقة الدفع:",
-                    ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
-                    key="pay_main_mode"
-                )
-
-                st.markdown("---")
-                summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
-                summary += f"\n- التوصيل: {delivery:.2f} د.أ"
-                
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True) and order_ready():
-                    try:
-                        sb.table("orders").insert({
-                            "customer_name": st.session_state.customer_name,
-                            "customer_phone": st.session_state.phone,
-                            "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
-                            "order_details": summary,
-                            "total_amount": total,
-                            "payment_method": payment,
-                            "order_status": "قيد التجهيز",
-                            "driver_name": "",
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        }).execute()
-
-                        st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
-                        st.session_state.cart = []
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"خطأ أثناء إرسال الطلب: {e}")
-
-                render_whatsapp_option(summary, subtotal, delivery, service, total, payment, key_suffix="main")
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-
-# ============================================================
-# 2. الطلبات وتتبع الرحلة
-# ============================================================
-elif st.session_state.nav_tab == "الطلبات":
-    render_top_header(
-        "📦 طلباتي ومتابعة رحلة التوصيل",
-        "تابع حالة طلبك خطوة بخطوة من التجهيز وحتى الوصول",
-        show_deliver=False
-    )
-
-    try:
-        phone_now = (st.session_state.phone or "").strip()
-        orders = (sb.table("orders").select("*").eq("customer_phone", phone_now).order("id", desc=True).execute().data or []) if phone_now else []
-        if orders:
-            for ord_item in orders:
-                status = ord_item.get('order_status', 'قيد التجهيز')
-                driver = ord_item.get('driver_name', '')
-                
-                steps = ["قيد التجهيز", "استلم السائق الطلب", "في الطريق", "تم الاستلام"]
-                current_step_idx = 0
-                if status in steps:
-                    current_step_idx = steps.index(status)
-                elif status == "جاهز":
-                    current_step_idx = 1
-                
-                st.markdown(f"""
-                <div style="background:white; border-radius:20px; padding:20px; margin-bottom:15px; border:1px solid #E5DDF3; box-shadow: 0 4px 15px rgba(106,18,196,0.06);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <span style="font-size:16px; font-weight:900; color:#6A12C4;">رقم الطلب: #{ord_item.get('id')}</span>
-                        <span style="background:#D7FF3B; color:#1B1B1B; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
-                    </div>
-                    <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>وقت الطلب:</b> {ord_item.get('created_at')}</p>
-                    <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>المبلغ الإجمالي:</b> {ord_item.get('total_amount')} د.أ</p>
-                    <hr style="margin:10px 0; border:0; border-top:1px solid #F1ECF8;">
-                """, unsafe_allow_html=True)
-                
-                st.markdown("📍 **رحلة الطلب المباشرة:**")
-                prog_cols = st.columns(4)
-                for s_idx, s_name in enumerate(steps):
-                    with prog_cols[s_idx]:
-                        if s_idx <= current_step_idx:
-                            st.markdown(f"<div style='background:#7B1FD6; color:white; padding:6px; border-radius:20px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div style='background:#F1ECF8; color:#94A3B8; padding:6px; border-radius:20px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
-                
-                if current_step_idx >= 1:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    col_d1, col_d2 = st.columns(2)
-                    with col_d1:
-                        driver_display = driver if driver else "جارٍ تعيين سائق..."
-                        st.markdown(f"🛵 **السائق المسؤول:** `{driver_display}`")
-                    with col_d2:
-                        st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
-
-                if st.session_state.customer_map_link:
-                    st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#6A12C4; color:white; padding:8px 16px; border-radius:20px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
-
-                with st.expander("📄 تفاصيل الأصناف المطلوبة"):
-                    st.code(ord_item.get('order_details', ''), language=None)
-
-                st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            info_col1, info_col2 = st.columns([4, 1])
-            with info_col1:
-                st.info("لا توجد طلبات سابقة مسجلة برقم هاتفك الحالي." if phone_now else "أدخل رقم هاتفك من صفحة «حسابي» لعرض طلباتك.")
-            with info_col2:
-                if st.button("🔄 تحديث الطلبات", use_container_width=True):
-                    st.rerun()
-    except Exception as e:
-        st.error(f"تعذر جلب الطلبات: {e}")
-
-
-# ============================================================
-# 3. الحساب وعنوان التوصيل مع ربط الخريطة الفعّال
-# ============================================================
-elif st.session_state.nav_tab == "الحساب":
-    render_top_header(
-        "👤 حسابي وعنوان التوصيل",
-        "قم بتحديث معلوماتك، تحديد موقعك الجغرافي برابط خرائط جوجل، أو إدارة حسابك بكل سهولة",
-        show_deliver=False
-    )
-
-    st.session_state.customer_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
-    
-    old_phone_val = st.session_state.phone
-    st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
-    
-    st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
-    st.session_state.customer_address = st.text_area("تفاصيل العنوان أو المنطقة (المدينة، الحي، الشارع):", value=st.session_state.customer_address)
-    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
-
-    st.markdown("📍 **الموقع الجغرافي (ربط رابط خرائط جوجل الفعّال):**")
-    st.markdown("<p style='font-size:12px; color:#64748B; margin-top:-5px;'>يُرجى إدخال رابط فعال من خرائط جوجل لموقعك بدقة لضمان وصول السائق للمنطقة فوراً.</p>", unsafe_allow_html=True)
-
-    st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
-
-    map_cols = st.columns(2)
-    with map_cols[0]:
-        if st.button("🌐 فتح خرائط جوجل لنسخ الرابط"):
-            st.markdown('<meta http-equiv="refresh" content="0;url=https://maps.google.com">', unsafe_allow_html=True)
-            st.info("💡 تم توجيهك لخرائط جوجل. ابحث عن موقعك، انسخ رابط المشاركة (Share Link)، ثم الصقه في الحقل أعلاه.")
-    with map_cols[1]:
-        if st.button("🧹 مسح رابط الموقع الحالي"):
-            st.session_state.customer_map_link = ""
-            st.success("✅ تم مسح رابط الموقع. الصق رابط موقعك الجديد في الحقل أعلاه.")
-            st.rerun()
-
-    # معاينة الرابط الفعّال إذا كان موجوداً
-    if st.session_state.customer_map_link:
-        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#F3EAFD; border:1px solid #7B1FD6; border-radius:12px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # أزرار الإجراءات المستقلة
-    col_b1, col_b2, col_b3 = st.columns(3)
-
-    with col_b1:
-        if st.button("💾 حفظ وتحديث البيانات", use_container_width=True):
-            try:
-                sb.table("customers").upsert(
-                    {
-                        "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
-                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
-                    },
-                    on_conflict="phone"
-                ).execute()
-                st.success("🎉 تم حفظ وتحديث بياناتك ورابط الموقع بنجاح!")
-            except Exception as e:
-                st.error(f"خطأ أثناء الحفظ: {e}")
-
-    with col_b2:
-        if st.button("🔄 تغيير الرقم / الانتقال لمنطقة أخرى", use_container_width=True):
-            try:
-                if old_phone_val != st.session_state.phone:
-                    sb.table("customers").delete().eq("phone", old_phone_val).execute()
-
-                sb.table("customers").upsert(
-                    {
-                        "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
-                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
-                    },
-                    on_conflict="phone"
-                ).execute()
-                st.success("🎉 تم اعتماد الرقم الجديد والمنطقة ورابط الخريطة بنجاح!")
-            except Exception as e:
-                st.error(f"خطأ أثناء تحديث رقم الهاتف أو المنطقة: {e}")
-
-    with col_b3:
-        if st.button("🗑 مسح وحذف الحساب", use_container_width=True):
-            try:
-                sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
-                st.session_state.customer_name = ""
-                st.session_state.customer_address = ""
-                st.session_state.delivery_notes = ""
-                st.session_state.customer_email = ""
-                st.session_state.customer_map_link = ""
-                st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"خطأ أثناء حذف الحساب: {e}")
+                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على
