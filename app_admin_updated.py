@@ -207,18 +207,44 @@ def handle_image_input(uploaded_file, url_input):
 with tab_orders:
     st.subheader("📦 متابعة الطلبات الواردة والتنبيهات")
     
-    st.markdown(
-        """
-        <audio autoplay style="display:none;">
-            <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
-        </audio>
-        """,
-        unsafe_allow_html=True
-    )
-    st.caption("🔔 تم تشغيل جرس التنبيه الصوتي للطلبات الجديدة تلقائياً.")
+    # تحديث تلقائي للصفحة لالتقاط الطلبات الجديدة (يعمل ما دامت الصفحة مفتوحة)
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=15000, key="admin_auto_refresh")
+    except Exception:
+        pass
+
+    sound_on = st.toggle("🔔 تفعيل الجرس الصوتي للطلبات الجديدة (فعّله بضغطة واحدة ليسمح المتصفح بالصوت)", value=False, key="admin_sound_toggle")
+    st.caption("يعمل التنبيه الصوتي والتحديث التلقائي فقط ما دامت هذه الصفحة مفتوحة. للتنبيه على الهاتف بدون فتح الصفحة فعّل إشعارات تيليجرام للإدارة.")
 
     try:
         orders = sb.table("orders").select("*").order("id", desc=True).execute().data or []
+
+        # كشف الطلبات الجديدة منذ آخر تحديث (لا يُشغَّل الجرس إلا عند وصول طلب جديد فعلاً)
+        try:
+            max_id = max((int(o.get("id") or 0) for o in orders), default=0)
+        except Exception:
+            max_id = 0
+        last_seen = st.session_state.get("last_seen_order_id")
+        if last_seen is None:
+            st.session_state["last_seen_order_id"] = max_id
+        elif max_id > last_seen:
+            new_count = sum(1 for o in orders if int(o.get("id") or 0) > last_seen)
+            st.warning(f"🔔 وصل {new_count} طلب جديد!")
+            if sound_on:
+                st.markdown(
+                    """
+                    <audio autoplay style="display:none;">
+                        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+                    </audio>
+                    """,
+                    unsafe_allow_html=True
+                )
+            st.session_state["last_seen_order_id"] = max_id
+
+        pending_count = sum(1 for o in orders if (o.get("order_status") or "قيد التجهيز") == "قيد التجهيز")
+        st.info(f"📋 طلبات بانتظار المعالجة: {pending_count}")
+
         drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
         drivers_by_name = {d.get("name"): d for d in drivers_data}
