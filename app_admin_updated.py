@@ -10,16 +10,6 @@ from supabase import create_client
 
 
 # ============================================================
-# مكتبات التنبيهات
-# ============================================================
-try:
-    from streamlit_autorefresh import st_autorefresh
-    HAS_AUTOREFRESH = True
-except Exception:
-    HAS_AUTOREFRESH = False
-
-
-# ============================================================
 # إعداد الصفحة (لوحة الإدارة المستقلة)
 # ============================================================
 st.set_page_config(
@@ -67,11 +57,6 @@ st.markdown(
     font-size: 12px;
     margin: 0;
 }
-@keyframes pulseAlert {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.015); }
-    100% { transform: scale(1); }
-}
 </style>
 """,
     unsafe_allow_html=True
@@ -90,7 +75,6 @@ try:
 except Exception:
     pass
 
-
 def db():
     try:
         return create_client(SUPABASE_URL.strip(), SUPABASE_ANON_KEY.strip())
@@ -98,222 +82,24 @@ def db():
         st.error(f"❌ تعذر الاتصال بـ Supabase: {e}")
         st.stop()
 
-
 sb = db()
 
 
 # ============================================================
-# إعدادات نظام التنبيهات (الجرس)
+# رأس لوحة الإدارة
 # ============================================================
-ALERT_CHECK_INTERVAL_MS = 4000
-ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+st.markdown(
+    """
+    <div class="admin-header">
+        <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
+        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-
-# ============================================================
-# Session State للتنبيهات
-# ============================================================
-if "alerts_enabled" not in st.session_state:
-    st.session_state.alerts_enabled = False
-
-if "last_order_id_seen" not in st.session_state:
-    st.session_state.last_order_id_seen = None
-
-if "last_merchant_id_seen" not in st.session_state:
-    st.session_state.last_merchant_id_seen = None
-
-if "new_orders_buffer" not in st.session_state:
-    st.session_state.new_orders_buffer = []
-
-if "new_merchants_buffer" not in st.session_state:
-    st.session_state.new_merchants_buffer = []
-
-if "first_run_done" not in st.session_state:
-    st.session_state.first_run_done = False
-
-if "mute_alerts" not in st.session_state:
-    st.session_state.mute_alerts = False
-
-
-# ============================================================
-# دالة تشغيل الصوت + إشعار المتصفح
-# ============================================================
-def fire_alert_sound_and_notification(title, body):
-    """يشغّل صوت الجرس ويعرض إشعار متصفح."""
-    if not st.session_state.alerts_enabled or st.session_state.mute_alerts:
-        return
-
-    safe_title = str(title).replace("`", "").replace("\\", "").replace('"', "'")
-    safe_body = str(body).replace("`", "").replace("\\", "").replace('"', "'")
-
-    js_sound = (
-        "(function() { try { var a = new Audio('" + ALERT_SOUND_URL + "'); "
-        "a.volume = 1.0; a.play().catch(function(e) { console.log('sound blocked', e); }); "
-        "} catch (err) { console.log(err); } })();"
-    )
-    try:
-        st.components.v1.html(f"<script>{js_sound}</script>", height=0)
-    except Exception:
-        pass
-
-    js_notif = (
-        "(function() { try { "
-        "if (!('Notification' in window)) return; "
-        "var t = '" + safe_title + "'; var b = '" + safe_body + "'; "
-        "if (Notification.permission === 'granted') { "
-        "new Notification(t, { body: b, icon: 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png' }); "
-        "} else if (Notification.permission !== 'denied') { "
-        "Notification.requestPermission().then(function(p) { "
-        "if (p === 'granted') new Notification(t, { body: b }); }); } "
-        "} catch (e) { console.log(e); } })();"
-    )
-    try:
-        st.components.v1.html(f"<script>{js_notif}</script>", height=0)
-    except Exception:
-        pass
-
-
-# ============================================================
-# رأس لوحة الإدارة + شريط التنبيهات
-# ============================================================
-header_col1, header_col2 = st.columns([4, 1.4])
-
-with header_col1:
-    st.markdown(
-        """
-        <div class="admin-header">
-            <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
-            <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with header_col2:
-    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-    if not st.session_state.alerts_enabled:
-        if st.button("🔔 تفعيل التنبيهات الصوتية", use_container_width=True, key="enable_alerts_btn"):
-            st.session_state.alerts_enabled = True
-            try:
-                st.components.v1.html(
-                    "<script>if ('Notification' in window && Notification.permission !== 'granted') { Notification.requestPermission(); }</script>",
-                    height=0
-                )
-            except Exception:
-                pass
-            st.success("✅ تم تفعيل التنبيهات. ستسمع الجرس عند وصول طلب أو تسجيل تاجر جديد.")
-            st.rerun()
-    else:
-        if st.session_state.mute_alerts:
-            if st.button("🔕 التنبيهات مكتومة (اضغط للتفعيل)", use_container_width=True, key="unmute_btn"):
-                st.session_state.mute_alerts = False
-                st.rerun()
-        else:
-            if st.button("🔊 التنبيهات مفعّلة (اضغط للكتم)", use_container_width=True, key="mute_btn"):
-                st.session_state.mute_alerts = True
-                st.rerun()
-
-
-# ============================================================
-# التنبيهات التلقائية: فحص الطلبات والمتاجر الجديدة
-# ============================================================
-if HAS_AUTOREFRESH:
-    st_autorefresh(interval=ALERT_CHECK_INTERVAL_MS, key="admin_alert_refresh")
-
-try:
-    latest_orders = (
-        sb.table("orders").select("id, customer_name, total_amount")
-        .order("id", desc=True).limit(5).execute().data or []
-    )
-    latest_merchants = (
-        sb.table("merchants").select("id, name, category")
-        .order("id", desc=True).limit(5).execute().data or []
-    )
-except Exception:
-    latest_orders = []
-    latest_merchants = []
-
-latest_order_id = latest_orders[0]["id"] if latest_orders else None
-latest_merchant_id = latest_merchants[0]["id"] if latest_merchants else None
-
-if not st.session_state.first_run_done:
-    st.session_state.last_order_id_seen = latest_order_id
-    st.session_state.last_merchant_id_seen = latest_merchant_id
-    st.session_state.first_run_done = True
-else:
-    # فحص الطلبات الجديدة
-    if latest_order_id is not None and st.session_state.last_order_id_seen is not None:
-        if latest_order_id > st.session_state.last_order_id_seen:
-            new_orders = [
-                o for o in latest_orders
-                if o["id"] > st.session_state.last_order_id_seen
-            ]
-            for o in new_orders:
-                st.session_state.new_orders_buffer.append(o)
-                fire_alert_sound_and_notification(
-                    "🛒 طلب جديد في بوابة الكرك",
-                    f"طلب #{o['id']} من {o.get('customer_name', 'زبون')} بقيمة {o.get('total_amount', 0)} د.أ"
-                )
-            st.session_state.last_order_id_seen = latest_order_id
-
-    # فحص المتاجر الجديدة
-    if latest_merchant_id is not None and st.session_state.last_merchant_id_seen is not None:
-        if latest_merchant_id > st.session_state.last_merchant_id_seen:
-            new_merch = [
-                m for m in latest_merchants
-                if m["id"] > st.session_state.last_merchant_id_seen
-            ]
-            for m in new_merch:
-                st.session_state.new_merchants_buffer.append(m)
-                fire_alert_sound_and_notification(
-                    "🏬 تاجر جديد سجّل في بوابة الكرك",
-                    f"متجر: {m.get('name', '')} — تصنيف: {m.get('category', '')}"
-                )
-            st.session_state.last_merchant_id_seen = latest_merchant_id
-
-
-# ---------- شريط التنبيهات البصري ----------
-if st.session_state.new_orders_buffer or st.session_state.new_merchants_buffer:
-    total_new = len(st.session_state.new_orders_buffer) + len(st.session_state.new_merchants_buffer)
-
-    alert_html = (
-        '<div style="background: linear-gradient(135deg, #FF5A00, #E04E00); '
-        'border-radius: 12px; padding: 12px 16px; margin-bottom: 15px; '
-        'box-shadow: 0 4px 14px rgba(255,90,0,0.35); '
-        'display: flex; justify-content: space-between; align-items: center; '
-        'animation: pulseAlert 1.5s infinite;">'
-        '<div style="color:white; font-weight: 800; font-size: 15px;">'
-        f'🔔 لديك {total_new} تنبيه جديد!'
-        '</div>'
-        '<div style="color:white; font-size: 13px;">'
-    )
-    if st.session_state.new_orders_buffer:
-        alert_html += f"🛒 {len(st.session_state.new_orders_buffer)} طلب جديد &nbsp;|&nbsp; "
-    if st.session_state.new_merchants_buffer:
-        alert_html += f"🏬 {len(st.session_state.new_merchants_buffer)} تاجر جديد"
-    alert_html += "</div></div>"
-
-    st.markdown(alert_html, unsafe_allow_html=True)
-
-    with st.expander("📋 عرض التنبيهات الجديدة", expanded=True):
-        if st.session_state.new_orders_buffer:
-            st.markdown("**🛒 طلبات جديدة:**")
-            for o in st.session_state.new_orders_buffer:
-                st.write(f"- طلب #{o['id']} — {o.get('customer_name','')} — {o.get('total_amount',0)} د.أ")
-        if st.session_state.new_merchants_buffer:
-            st.markdown("**🏬 متاجر جديدة:**")
-            for m in st.session_state.new_merchants_buffer:
-                st.write(f"- {m.get('name','')} — {m.get('category','')}")
-        if st.button("✅ تم الاطلاع — مسح التنبيهات", key="clear_alerts_btn"):
-            st.session_state.new_orders_buffer = []
-            st.session_state.new_merchants_buffer = []
-            st.rerun()
-
-
-# ============================================================
-# قائمة الأقسام
-# ============================================================
 categories_list = [
-    "مطاعم", "حلويات", "ماركت", "محامص ومكسرات",
+    "مطاعم", "حلويات", "ماركت", "محامص ومكسرات", 
     "خضروات وفواكه", "لحوم", "صيدليات ومستلزمات طبيه"
 ]
 
@@ -323,11 +109,11 @@ categories_list = [
 # ============================================================
 tabs = st.tabs([
     "📦 الطلبات والتنبيهات",
-    "🏬 المتاجر",
+    "🏬 المتاجر", 
     "📋 أصناف المتاجر",
-    "🛵 إدارة السائقين",
-    "👥 سجل الزبائن",
-    "🏷 إدارة العروض",
+    "🛵 إدارة السائقين", 
+    "👥 سجل الزبائن", 
+    "🏷 إدارة العروض", 
     "📊 التقرير المالي"
 ])
 
@@ -352,7 +138,8 @@ def to_float_or_none(value):
 
 
 def save_merchant(op, base_payload, fee_payload, merchant_id=None):
-    """يحفظ بيانات المتجر مع أجور التوصيل."""
+    """يحفظ بيانات المتجر مع أجور التوصيل. إذا كانت الأعمدة غير موجودة يحفظ البيانات الأساسية ويعرض تنبيهاً.
+    يرجع True إذا نجح الحفظ كاملاً."""
     def run(payload):
         if op == "update":
             sb.table("merchants").update(payload).eq("id", merchant_id).execute()
@@ -367,6 +154,35 @@ def save_merchant(op, base_payload, fee_payload, merchant_id=None):
         st.warning("تم حفظ بيانات المتجر، لكن أعمدة أجور التوصيل غير موجودة في Supabase. نفّذ هذا الأمر في SQL Editor ثم احفظ مرة أخرى:")
         st.code(FEE_COLUMNS_SQL, language="sql")
         return False
+
+
+# ============================================================
+# أدوات واتساب (الإدارة هي من يقرر ماذا يُرسل ولمن)
+# ============================================================
+def intl_phone(phone):
+    digits = re.sub(r"\D", "", str(phone or ""))
+    if not digits:
+        return ""
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("962"):
+        return digits
+    if digits.startswith("0"):
+        return "962" + digits[1:]
+    if len(digits) == 9:
+        return "962" + digits
+    return digits
+
+
+def wa_link(phone, message):
+    num = intl_phone(phone)
+    if not num:
+        return None
+    return f"https://wa.me/{num}?text={urllib.parse.quote(message)}"
+
+
+def wa_button(link, label, color="#25D366"):
+    return f'<a href="{link}" target="_blank"><div style="background:{color}; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">{label}</div></a>'
 
 
 # ============================================================
@@ -390,18 +206,24 @@ def handle_image_input(uploaded_file, url_input):
 # ============================================================
 with tab_orders:
     st.subheader("📦 متابعة الطلبات الواردة والتنبيهات")
-
-    if st.session_state.alerts_enabled and not st.session_state.mute_alerts:
-        st.caption("🔔 التنبيهات الصوتية مفعّلة — سيصدر الجرس تلقائياً عند وصول طلب جديد.")
-    elif st.session_state.alerts_enabled and st.session_state.mute_alerts:
-        st.caption("🔕 التنبيهات مكتومة مؤقتاً. اضغط زر الكتم أعلى الصفحة لإعادة التفعيل.")
-    else:
-        st.caption("⚠️ التنبيهات الصوتية غير مفعّلة. اضغط زر «🔔 تفعيل التنبيهات الصوتية» أعلى الصفحة.")
+    
+    st.markdown(
+        """
+        <audio autoplay style="display:none;">
+            <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+        </audio>
+        """,
+        unsafe_allow_html=True
+    )
+    st.caption("🔔 تم تشغيل جرس التنبيه الصوتي للطلبات الجديدة تلقائياً.")
 
     try:
         orders = sb.table("orders").select("*").order("id", desc=True).execute().data or []
-        drivers_data = sb.table("drivers").select("name").execute().data or []
+        drivers_data = sb.table("drivers").select("name, phone").execute().data or []
         drivers_list = [d["name"] for d in drivers_data] if drivers_data else ["لا توجد سائقون مسجلون"]
+        drivers_by_name = {d.get("name"): d for d in drivers_data}
+        merchants_all = sb.table("merchants").select("name, phone, map_link, location").execute().data or []
+        merchants_by_name = {m.get("name"): m for m in merchants_all}
 
         if orders:
             for ord_item in orders:
@@ -449,17 +271,58 @@ with tab_orders:
                             st.error(f"خطأ: {e}")
 
                 c_phone_str = str(c_phone or "")
-                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
-                wa_msg_store = f"تنبيه طلب جديد رقم #{oid} للزبون {c_name} ({c_phone_str}). العنوان: {c_address}. الإجمالي: {total} د.أ"
+                details_text = str(details or "")
+                order_lines = details_text.splitlines()
+                store_names = list(dict.fromkeys(n.strip() for n in re.findall(r"\[المتجر:\s*([^\]]+)\]", details_text)))
 
-                url_cust = f"https://wa.me/962{c_phone_str.lstrip('0')}?text={urllib.parse.quote(wa_msg_cust)}"
-                url_store = f"https://wa.me/962797088219?text={urllib.parse.quote(wa_msg_store)}"
+                # 1) رسالة للزبون بحالة طلبه
+                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
+                url_cust = wa_link(c_phone_str, wa_msg_cust)
+
+                # 2) رسالة للسائق المعيّن: بيانات التوصيل كاملة
+                drv_info = drivers_by_name.get(assigned_driver) or {}
+                store_lines = []
+                for sn in store_names:
+                    mi = merchants_by_name.get(sn) or {}
+                    store_lines.append(f"- {sn} | هاتف: {mi.get('phone') or '-'} | الموقع: {mi.get('map_link') or mi.get('location') or '-'}")
+                drv_msg = (
+                    f"🛵 توصيل طلب رقم #{oid} (بوابة الكرك)\n"
+                    f"الزبون: {c_name}\n"
+                    f"هاتف الزبون: {c_phone_str}\n"
+                    f"العنوان: {c_address}\n"
+                    "الاستلام من:\n" + ("\n".join(store_lines) if store_lines else "-") + "\n"
+                    f"طريقة الدفع: {payment}"
+                )
+                if "نقد" in str(payment or ""):
+                    drv_msg += f"\nالمبلغ المطلوب تحصيله نقداً: {total} د.أ"
+                url_drv = wa_link(drv_info.get("phone"), drv_msg)
 
                 w_c1, w_c2 = st.columns(2)
                 with w_c1:
-                    st.markdown(f'<a href="{url_cust}" target="_blank"><div style="background:#25D366; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 مراسلة الزبون واتساب</div></a>', unsafe_allow_html=True)
+                    if url_cust:
+                        st.markdown(wa_button(url_cust, "💬 مراسلة الزبون واتساب"), unsafe_allow_html=True)
+                    else:
+                        st.caption("لا يوجد رقم صالح للزبون.")
                 with w_c2:
-                    st.markdown(f'<a href="{url_store}" target="_blank"><div style="background:#128C7E; color:white; padding:8px; border-radius:6px; text-align:center; font-weight:bold; font-size:12px;">💬 إرسال للمتجر واتساب (0797088219)</div></a>', unsafe_allow_html=True)
+                    if url_drv:
+                        st.markdown(wa_button(url_drv, f"🛵 إرسال تفاصيل التوصيل للسائق ({assigned_driver})", "#128C7E"), unsafe_allow_html=True)
+                    else:
+                        st.caption("اختر سائقاً له رقم هاتف مسجل لإرسال التفاصيل.")
+
+                # 3) رسالة لكل تاجر: الأصناف فقط بدون أي بيانات للزبون
+                if store_names:
+                    st.caption("📤 إرسال الطلب للتجار (الأصناف فقط، بدون بيانات الزبون):")
+                    s_cols = st.columns(len(store_names))
+                    for si, sn in enumerate(store_names):
+                        mi = merchants_by_name.get(sn) or {}
+                        items = [re.sub(r"\s*\[المتجر:[^\]]*\]", "", ln).strip() for ln in order_lines if f"[المتجر: {sn}]" in ln]
+                        store_msg = f"طلب جديد رقم #{oid} من بوابة الكرك\nالمتجر: {sn}\nالأصناف:\n" + "\n".join(items)
+                        url_store = wa_link(mi.get("phone"), store_msg)
+                        with s_cols[si]:
+                            if url_store:
+                                st.markdown(wa_button(url_store, f"📤 إرسال لـ {sn}", "#075E54"), unsafe_allow_html=True)
+                            else:
+                                st.caption(f"لا يوجد رقم مسجل للمتجر {sn}.")
 
                 st.markdown("---")
         else:
@@ -473,9 +336,9 @@ with tab_orders:
 # ============================================================
 with tab_merchants:
     st.subheader("🏬 إدارة المتاجر الشاملة")
-
+    
     sub_m_tab1, sub_m_tab2 = st.tabs(["تعديل / حذف متجر قائم", "إضافة متجر جديد"])
-
+    
     with sub_m_tab1:
         try:
             merchants = sb.table("merchants").select("*").execute().data or []
@@ -483,7 +346,7 @@ with tab_merchants:
                 m_names = [m["name"] for m in merchants]
                 sel_m = st.selectbox("اختر المتجر للتعديل:", m_names, key="sel_merchant_edit")
                 cur_m = next((m for m in merchants if m["name"] == sel_m), None)
-
+                
                 if cur_m:
                     map_link_val = cur_m.get("map_link", "")
                     if map_link_val:
@@ -508,7 +371,7 @@ with tab_merchants:
                         with ll_c2:
                             e_lng = st.text_input("خط الطول Lng (اختياري):", value="" if cur_m.get("lng") is None else str(cur_m.get("lng")))
                         st.caption("إذا تركت الإحداثيات فارغة يحاول النظام استخراج موقع المتجر من رابط خرائط جوجل. الإحداثيات المكتوبة أدق خصوصاً مع الروابط القصيرة.")
-
+                        
                         e_img_url = st.text_input("رابط الصورة الحالي أو الجديد (URL):", value=cur_m.get("image_data", ""))
                         e_img_file = st.file_uploader("أو ارفع صورة جديدة للمتجر:", type=["jpg", "png", "jpeg"], key=f"file_m_{cur_m['id']}")
 
@@ -526,14 +389,14 @@ with tab_merchants:
                             safe_e_loc = str(e_loc or "").strip()
                             safe_e_map = str(e_map or "").strip()
                             final_img = handle_image_input(e_img_file, e_img_url)
-
+                            
                             base_payload = {
-                                "name": safe_e_name,
-                                "category": e_cat,
+                                "name": safe_e_name, 
+                                "category": e_cat, 
                                 "phone": safe_e_phone,
-                                "location": safe_e_loc,
+                                "location": safe_e_loc, 
                                 "map_link": safe_e_map,
-                                "image_data": final_img,
+                                "image_data": final_img, 
                                 "status": e_status
                             }
                             fee_payload = {
@@ -575,7 +438,7 @@ with tab_merchants:
                 n_lat = st.text_input("خط العرض Lat (اختياري):", "", key="new_store_lat")
             with nl_c2:
                 n_lng = st.text_input("خط الطول Lng (اختياري):", "", key="new_store_lng")
-
+            
             n_img_url = st.text_input("رابط صورة المتجر (URL):", "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80")
             n_img_file = st.file_uploader("أو رفع ملف صورة المتجر:", type=["jpg", "png", "jpeg"], key="new_m_file")
 
@@ -586,20 +449,20 @@ with tab_merchants:
             safe_n_phone = str(n_phone or "").strip()
             safe_n_loc = str(n_loc or "").strip()
             safe_n_map = str(n_map or "").strip()
-
+            
             if not safe_n_name:
                 st.warning("الرجاء إدخال اسم المتجر على الأقل.")
             else:
                 try:
                     final_n_img = handle_image_input(n_img_file, n_img_url)
-
+                    
                     base_payload = {
-                        "name": safe_n_name,
-                        "category": n_cat,
+                        "name": safe_n_name, 
+                        "category": n_cat, 
                         "phone": safe_n_phone,
-                        "location": safe_n_loc,
+                        "location": safe_n_loc, 
                         "map_link": safe_n_map,
-                        "image_data": final_n_img,
+                        "image_data": final_n_img, 
                         "status": "معتمد"
                     }
                     fee_payload = {
@@ -647,7 +510,7 @@ with tab_products:
                             up_p_price = st.number_input("السعر (د.أ):", value=float(cur_p.get("price") or 0.0), step=0.25)
                             up_p_qty = st.text_input("الكمية:", value=str(cur_p.get("quantity", "1")))
                             up_p_unit = st.text_input("الوحدة:", value=str(cur_p.get("unit", "حبة")))
-
+                            
                             up_p_url = st.text_input("رابط الصورة الحالي (URL):", value=str(cur_p.get("image_path", "")))
                             up_p_file = st.file_uploader("أو رفع صورة جديدة للصنف:", type=["jpg", "png", "jpeg"], key=f"file_p_{cur_p['id']}")
 
@@ -662,7 +525,7 @@ with tab_products:
                                 safe_p_qty = str(up_p_qty or "").strip()
                                 safe_p_unit = str(up_p_unit or "").strip()
                                 final_p_img = handle_image_input(up_p_file, up_p_url)
-
+                                
                                 sb.table("products").update({
                                     "item_name": safe_p_name,
                                     "price": up_p_price,
@@ -692,17 +555,17 @@ with tab_products:
                 prod_price = st.number_input("السعر (د.أ):", min_value=0.0, value=1.00, step=0.25)
                 prod_qty = st.text_input("الكمية أو الحجم:", "1")
                 prod_unit = st.text_input("الوحدة (كغ، حبة، طبق، إلخ):", "حبة")
-
+                
                 prod_url = st.text_input("رابط صورة الصنف (URL):", "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80")
                 prod_file = st.file_uploader("أو رفع ملف صورة الصنف:", type=["jpg", "png", "jpeg"], key="new_p_file")
 
                 submit_prod = st.form_submit_button("💾 حفظ وإضافة الصنف")
-
+                
                 if submit_prod:
                     safe_prod_name = str(prod_name or "").strip()
                     safe_prod_qty = str(prod_qty or "").strip()
                     safe_prod_unit = str(prod_unit or "").strip()
-
+                    
                     if not safe_prod_name:
                         st.warning("الرجاء إدخال اسم الصنف.")
                     else:
@@ -758,7 +621,7 @@ with tab_drivers:
                             safe_ud_name = str(ud_name or "").strip()
                             safe_ud_phone = str(ud_phone or "").strip()
                             safe_ud_map = str(ud_map or "").strip()
-
+                            
                             sb.table("drivers").update({
                                 "name": safe_ud_name,
                                 "phone": safe_ud_phone,
@@ -783,13 +646,13 @@ with tab_drivers:
             new_d_name = st.text_input("اسم السائق:")
             new_d_phone = st.text_input("رقم الهاتف:", "079xxxxxxx")
             new_d_map = st.text_input("رابط موقع السائق (Google Maps URL):", "")
-
+            
             if st.form_submit_button("➕ إضافة السائق للنظام"):
                 try:
                     safe_new_d_name = str(new_d_name or "").strip()
                     safe_new_d_phone = str(new_d_phone or "").strip()
                     safe_new_d_map = str(new_d_map or "").strip()
-
+                    
                     sb.table("drivers").insert({
                         "name": safe_new_d_name,
                         "phone": safe_new_d_phone,
@@ -811,10 +674,7 @@ with tab_customers:
         customers = sb.table("customers").select("*").execute().data or []
         if customers:
             for cust in customers:
-                cust_map = cust.get('map_link') or (
-                    f"https://www.google.com/maps?q={cust.get('lat')},{cust.get('lng')}"
-                    if cust.get('lat') else "#"
-                )
+                cust_map = cust.get('map_link') or f"https://www.google.com/maps?q={cust.get('lat')},{cust.get('lng')}" if cust.get('lat') else "#"
                 st.markdown(f"""
                 <div style="background:white; border-radius:10px; padding:12px; margin-bottom:8px; border:1px solid #ddd;">
                     <b>👤 الاسم: {cust.get('name')}</b><br>
@@ -838,7 +698,7 @@ with tab_offers:
         offer_title = st.text_input("عنوان العرض (مثال: خصم 20% على وجبات الغداء):")
         offer_store = st.text_input("اسم المتجر المقدم للعرض:")
         offer_desc = st.text_area("تفاصيل العرض والشروط:")
-
+        
         if st.form_submit_button("📢 نشر العرض في التطبيق"):
             st.success(f"🎉 تم نشر العرض '{offer_title}' بنجاح لمتجر {offer_store}!")
 
@@ -852,8 +712,8 @@ with tab_finance:
         orders = sb.table("orders").select("total_amount, created_at, order_details").execute().data or []
         total_sales = sum(float(o.get("total_amount") or 0) for o in orders)
         total_orders_count = len(orders)
-
         def order_delivery_fee(o):
+            # الأجرة المسجلة داخل تفاصيل الطلب، وللطلبات القديمة الأجرة الافتراضية 1.50
             m = re.search(r"التوصيل:\s*([\d.]+)", str(o.get("order_details") or ""))
             return float(m.group(1)) if m else 1.50
 
