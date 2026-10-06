@@ -428,6 +428,13 @@ else:
         st.session_state.selected_category = "الكل"
 
 
+def normalize_map_link(value):
+    v = str(value or "").strip()
+    if v and not v.lower().startswith(("http://", "https://")):
+        v = "https://" + v
+    return v
+
+
 def safe_price(value):
     try:
         return float(value or 0)
@@ -834,7 +841,7 @@ if st.session_state.nav_tab == "الرئيسية":
             """, unsafe_allow_html=True)
 
             if m_data.get("map_link"):
-                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#6A12C4; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="{normalize_map_link(m_data.get("map_link"))}" target="_blank" rel="noopener noreferrer" style="color:#6A12C4; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
             store_products = [p for p in all_products if p.get("merchant_name") == mname]
 
@@ -1200,13 +1207,17 @@ elif st.session_state.nav_tab == "الحساب":
     st.markdown("📍 **الموقع الجغرافي (ربط رابط خرائط جوجل الفعّال):**")
     st.markdown("<p style='font-size:12px; color:#64748B; margin-top:-5px;'>يُرجى إدخال رابط فعال من خرائط جوجل لموقعك بدقة لضمان وصول السائق للمنطقة فوراً.</p>", unsafe_allow_html=True)
 
-    st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+    st.session_state.customer_map_link = normalize_map_link(
+        st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+    )
 
     map_cols = st.columns(2)
     with map_cols[0]:
-        if st.button("🌐 فتح خرائط جوجل لنسخ الرابط"):
-            st.markdown('<meta http-equiv="refresh" content="0;url=https://maps.google.com">', unsafe_allow_html=True)
-            st.info("💡 تم توجيهك لخرائط جوجل. ابحث عن موقعك، انسخ رابط المشاركة (Share Link)، ثم الصقه في الحقل أعلاه.")
+        st.markdown(
+            '<a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" style="display:block; text-align:center; background:#FF5A00; color:#FFFFFF !important; font-weight:bold; font-size:13px; padding:9px 12px; border-radius:24px; text-decoration:none;">🌐 فتح خرائط جوجل لنسخ الرابط</a>',
+            unsafe_allow_html=True
+        )
+        st.caption("💡 يُفتح في تبويب جديد: ابحث عن موقعك، اضغط «مشاركة» (Share)، انسخ الرابط، ثم ارجع والصقه في الحقل أعلاه.")
     with map_cols[1]:
         if st.button("🧹 مسح رابط الموقع الحالي"):
             st.session_state.customer_map_link = ""
