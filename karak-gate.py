@@ -527,7 +527,8 @@ def extract_coords(url):
     patterns = [
         r"@(-?\d+\.\d+),(-?\d+\.\d+)",
         r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)",
-        r"[?&](?:q|ll|query|destination|center)=(-?\d+\.\d+),\s*(-?\d+\.\d+)",
+        r"[?&](?:q|ll|query|destination|center|daddr|saddr)=(-?\d+\.\d+),\s*\+?(-?\d+\.\d+)",
+        r"/maps/(?:search|place|dir)/(?:[^/@]*/)?(-?\d+\.\d+),\s*\+?(-?\d+\.\d+)",
     ]
     for pat in patterns:
         m = re.search(pat, u)
@@ -601,6 +602,29 @@ def delivery_summary_line(delivery, lines):
 def render_min_order_notice(subtotal):
     if subtotal < MIN_ORDER_VALUE:
         st.warning(f"⚠️ الحد الأدنى للطلب {MIN_ORDER_VALUE:.2f} د.أ (بدون التوصيل والخدمة). يلزمك إضافة {MIN_ORDER_VALUE - subtotal:.2f} د.أ لإتمام الطلب.")
+
+
+def render_delivery_debug(cart, merchants):
+    # يظهر فقط عند فتح التطبيق بالرابط ...?debug=1 (لفحص حساب التوصيل)
+    try:
+        if str(st.query_params.get("debug", "")) != "1":
+            return
+    except Exception:
+        return
+    by_name = {mm.get("name"): mm for mm in merchants}
+    cust = extract_coords(st.session_state.customer_map_link) if st.session_state.customer_map_link else None
+    with st.expander("🔧 فحص حساب التوصيل"):
+        st.write(f"موقع الزبون المستخرج: {cust if cust else 'لم يُستخرج (الرابط فارغ أو غير مدعوم)'}")
+        for name in dict.fromkeys(item.get("merchant") for item in cart):
+            m = by_name.get(name)
+            if not m:
+                st.write(f"❌ المتجر «{name}» غير موجود في جدول المتاجر بنفس الاسم")
+                continue
+            base, per_km = merchant_fee_info(m)
+            st.write(
+                f"**{name}** | delivery_fee في القاعدة: {m.get('delivery_fee')} | fee_per_km في القاعدة: {m.get('fee_per_km')} | "
+                f"lat/lng: {m.get('lat')}/{m.get('lng')} | موقع المتجر المستخرج: {merchant_coords(m)} | أجرة الكم المعتمدة: {per_km}"
+            )
 
 
 def render_delivery_details(lines, uncertain):
@@ -913,6 +937,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
                 st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
                 render_delivery_details(delivery_lines, delivery_uncertain)
+                render_delivery_debug(st.session_state.cart, all_merchants)
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
                 render_min_order_notice(subtotal)
@@ -1086,6 +1111,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
                 st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
                 render_delivery_details(delivery_lines, delivery_uncertain)
+                render_delivery_debug(st.session_state.cart, all_merchants)
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
                 render_min_order_notice(subtotal)
