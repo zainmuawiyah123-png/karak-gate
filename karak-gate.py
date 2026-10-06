@@ -36,6 +36,7 @@ except Exception:
 WHATSAPP_NUMBER = "962797088219"  # +962797088219
 
 DEFAULT_DELIVERY_FEE = 1.50   # الأجرة الافتراضية إذا لم تحددها الإدارة للمتجر
+MIN_ORDER_VALUE = 5.0          # الحد الأدنى لقيمة الأصناف (بدون التوصيل والخدمة)
 ROAD_FACTOR = 1.3             # معامل تقريبي لتحويل المسافة المباشرة إلى مسافة طريق
 
 # ============================================================
@@ -578,17 +579,28 @@ def compute_delivery(cart, merchants):
         base, per_km = merchant_fee_info(m)
         fee = base
         dist = None
-        if per_km > 0:
-            store_xy = merchant_coords(m)
-            if cust and store_xy:
-                dist = haversine_km(cust, store_xy) * ROAD_FACTOR
+        store_xy = merchant_coords(m)
+        if cust and store_xy:
+            dist = haversine_km(cust, store_xy) * ROAD_FACTOR
+            if per_km > 0:
                 fee = base + per_km * dist
                 fee = math.ceil(fee * 4) / 4  # تقريب لأقرب 0.25
-            else:
-                uncertain = True
+        elif per_km > 0:
+            uncertain = True
         total += fee
         lines.append((name, fee, dist))
     return total, lines, uncertain
+
+
+def delivery_summary_line(delivery, lines):
+    parts = [f"{name}: {dist:.1f} كم" for name, fee, dist in lines if dist is not None]
+    extra = f" ({' | '.join(parts)})" if parts else ""
+    return f"\n- التوصيل: {delivery:.2f} د.أ{extra}"
+
+
+def render_min_order_notice(subtotal):
+    if subtotal < MIN_ORDER_VALUE:
+        st.warning(f"⚠️ الحد الأدنى للطلب {MIN_ORDER_VALUE:.2f} د.أ (بدون التوصيل والخدمة). يلزمك إضافة {MIN_ORDER_VALUE - subtotal:.2f} د.أ لإتمام الطلب.")
 
 
 def render_delivery_details(lines, uncertain):
@@ -668,7 +680,10 @@ def missing_fields():
     return miss
 
 
-def order_ready():
+def order_ready(subtotal=None):
+    if subtotal is not None and subtotal < MIN_ORDER_VALUE:
+        st.error(f"⚠️ لا يمكن إرسال الطلب: الحد الأدنى {MIN_ORDER_VALUE:.2f} د.أ (بدون التوصيل والخدمة)، ومجموع أصنافك {subtotal:.2f} د.أ.")
+        return False
     miss = missing_fields()
     if miss:
         st.error("⚠️ يرجى إكمال بياناتك من صفحة «حسابي» قبل إرسال الطلب: " + "، ".join(miss))
@@ -700,7 +715,7 @@ def render_whatsapp_option(summary, subtotal, delivery, service, total, payment,
         unsafe_allow_html=True
     )
     if st.button("📲 تسجيل الطلب وإرساله عبر واتساب", key=f"submit_wa_{key_suffix}", use_container_width=True):
-        if not order_ready():
+        if not order_ready(subtotal):
             return
         link = build_whatsapp_link(summary, subtotal, delivery, service, total, payment)
         try:
@@ -900,6 +915,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 render_delivery_details(delivery_lines, delivery_uncertain)
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+                render_min_order_notice(subtotal)
 
                 if st.button("🗑 تفريغ السلة", use_container_width=True):
                     st.session_state.cart = []
@@ -913,9 +929,9 @@ if st.session_state.nav_tab == "الرئيسية":
 
                 st.markdown("---")
                 summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
-                summary += f"\n- التوصيل: {delivery:.2f} د.أ"
+                summary += delivery_summary_line(delivery, delivery_lines)
                 
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True) and order_ready():
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_store_mode", use_container_width=True) and order_ready(subtotal):
                     try:
                         sb.table("orders").insert({
                             "customer_name": st.session_state.customer_name,
@@ -1072,6 +1088,7 @@ if st.session_state.nav_tab == "الرئيسية":
                 render_delivery_details(delivery_lines, delivery_uncertain)
                 st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
                 st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
+                render_min_order_notice(subtotal)
 
                 if st.button("🗑 تفريغ السلة", key="clear_cart_main", use_container_width=True):
                     st.session_state.cart = []
@@ -1085,9 +1102,9 @@ if st.session_state.nav_tab == "الرئيسية":
 
                 st.markdown("---")
                 summary = "\n".join(f"- {item['name']} ({item['price']:.2f} د.أ) [المتجر: {item['merchant']}]" for item in st.session_state.cart)
-                summary += f"\n- التوصيل: {delivery:.2f} د.أ"
+                summary += delivery_summary_line(delivery, delivery_lines)
                 
-                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True) and order_ready():
+                if st.button("📌 تأكيد وإرسال للنظام", key="submit_main_mode", use_container_width=True) and order_ready(subtotal):
                     try:
                         sb.table("orders").insert({
                             "customer_name": st.session_state.customer_name,
