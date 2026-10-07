@@ -1,5 +1,9 @@
 streamlit
 supabase
 streamlit-autorefresh
-streamlit-js-eval
 requests
+pywebpush
+cryptography
+openpyxl
+Pillow
+
