@@ -13,6 +13,7 @@ from supabase import create_client
 try:
     from push_service import send_push
     from driver_map import fee_for
+    from streamlit_integration import capture_subscription
     PUSH_IMPORT_OK = True
 except Exception:
     PUSH_IMPORT_OK = False
@@ -26,6 +27,24 @@ def push_ready():
 
 
 PUSH_ON = PUSH_IMPORT_OK and push_ready()
+
+# ---- (جديد) استيراد الأصناف بالجملة ----
+try:
+    from catalog_tools import render_bulk_import
+    CATALOG_OK = True
+except Exception:
+    CATALOG_OK = False
+
+
+def storage_client():
+    """عميل Supabase بمفتاح service لرفع الصور إلى Storage (يتوفر فقط إن أُضيف السر)."""
+    try:
+        if st.secrets.get("SUPABASE_SERVICE_KEY"):
+            from db import get_sb
+            return get_sb()
+    except Exception:
+        pass
+    return None
 
 
 # ============================================================
@@ -127,6 +146,10 @@ def admin_gate():
 
 
 admin_gate()
+
+# (جديد) حفظ جهاز الإدارة لاستلام إشعار "طلب جديد" (يعمل عند الفتح من أيقونة /admin/ على Netlify)
+if PUSH_ON:
+    capture_subscription("admin", 0)
 
 
 # ============================================================
@@ -528,7 +551,9 @@ with tab_merchants:
                         e_img_url = st.text_input("رابط الصورة الحالي أو الجديد (URL):", value=cur_m.get("image_data", ""))
                         e_img_file = st.file_uploader("أو ارفع صورة جديدة للمتجر:", type=["jpg", "png", "jpeg"], key=f"file_m_{cur_m['id']}")
 
-                        e_status = st.selectbox("الحالة:", ["معتمد", "قيد المراجعة", "موقف"], index=0)
+                        _m_status_opts = ["معتمد", "قيد المراجعة", "موقف"]
+                        _cur_m_status = cur_m.get("status") if cur_m.get("status") in _m_status_opts else "معتمد"
+                        e_status = st.selectbox("الحالة:", _m_status_opts, index=_m_status_opts.index(_cur_m_status))
 
                         col_sv, col_dl = st.columns(2)
                         with col_sv:
@@ -637,7 +662,7 @@ with tab_merchants:
 with tab_products:
     st.subheader("📋 إدارة أصناف ومنتجات المتاجر (إضافة، تعديل، حذف)")
 
-    sub_p_tab1, sub_p_tab2 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد"])
+    sub_p_tab1, sub_p_tab2, sub_p_tab3 = st.tabs(["تعديل / حذف صنف قائم", "إضافة صنف جديد", "📥 استيراد بالجملة (آلاف الأصناف)"])
 
     try:
         merchants_data = sb.table("merchants").select("name").execute().data or []
@@ -650,12 +675,17 @@ with tab_products:
             st.warning("لا توجد متاجر مسجلة حالياً.")
         else:
             sel_store_for_prod = st.selectbox("اختر المتجر لعرض أصنافه:", m_names_only, key="sel_store_prods")
+            prod_q = re.sub(r"[,()%*]", " ", st.text_input("🔎 ابحث باسم الصنف أو الباركود:", key="prod_search_q")).strip()
             try:
-                store_products = sb.table("products").select("*").eq("merchant_name", sel_store_for_prod).execute().data or []
+                pq = sb.table("products").select("*").eq("merchant_name", sel_store_for_prod)
+                if prod_q:
+                    pq = pq.or_(f"item_name.ilike.%{prod_q}%,barcode.eq.{prod_q}")
+                store_products = pq.order("id", desc=True).limit(50).execute().data or []
+                st.caption("يُعرض 50 صنفًا كحد أقصى، استخدم البحث للوصول لأي صنف.")
                 if store_products:
-                    p_names_list = [p["item_name"] for p in store_products]
-                    sel_prod_item = st.selectbox("اختر الصنف للتعديل أو الحذف:", p_names_list, key="sel_prod_item_edit")
-                    cur_p = next((p for p in store_products if p["item_name"] == sel_prod_item), None)
+                    prod_labels = {f"{p['item_name']} — #{p['id']}": p for p in store_products}
+                    sel_prod_item = st.selectbox("اختر الصنف للتعديل أو الحذف:", list(prod_labels), key="sel_prod_item_edit")
+                    cur_p = prod_labels.get(sel_prod_item)
 
                     if cur_p:
                         with st.form(f"edit_prod_form_{cur_p['id']}"):
@@ -694,7 +724,7 @@ with tab_products:
                                 st.warning("تم حذف الصنف بنجاح.")
                                 st.rerun()
                 else:
-                    st.info(f"لا توجد أصناف مضافة لهذا المتجر ({sel_store_for_prod}).")
+                    st.info(f"لا توجد أصناف مطابقة في المتجر ({sel_store_for_prod}).")
             except Exception as e:
                 st.error(f"خطأ: {e}")
 
@@ -737,6 +767,14 @@ with tab_products:
                             st.error(f"خطأ: {e}")
 
 
+    with sub_p_tab3:
+        if not m_names_only:
+            st.warning("الرجاء إضافة متجر أولاً.")
+        elif CATALOG_OK:
+            render_bulk_import(sb, m_names_only, storage_client())
+        else:
+            st.info("ارفع ملف catalog_tools.py إلى المستودع وأضف openpyxl و Pillow إلى requirements.txt لتفعيل الاستيراد بالجملة.")
+
 # ============================================================
 # 4. إدارة السائقين
 # ============================================================
@@ -762,7 +800,9 @@ with tab_drivers:
                         ud_name = st.text_input("اسم السائق:", value=cur_d.get("name", ""))
                         ud_phone = st.text_input("رقم الهاتف:", value=cur_d.get("phone", ""))
                         ud_map = st.text_input("رابط موقع السائق (Google Maps URL):", value=d_map_link)
-                        ud_status = st.selectbox("الحالة:", ["متاح", "في توصيل طلب", "غير متصل"], index=0)
+                        _d_status_opts = ["متاح", "في توصيل طلب", "غير متصل"]
+                        _cur_d_status = cur_d.get("status") if cur_d.get("status") in _d_status_opts else "متاح"
+                        ud_status = st.selectbox("الحالة:", _d_status_opts, index=_d_status_opts.index(_cur_d_status))
 
                         col_d1, col_d2 = st.columns(2)
                         with col_d1:
