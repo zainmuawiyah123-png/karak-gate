@@ -10,7 +10,7 @@ from db import get_sb
 from driver_map import render_driver_order, fee_for
 from streamlit_integration import capture_subscription
 
-st.set_page_config(page_title="بوابة السائقين - Karak Gate", page_icon="🛵", layout="wide")
+st.set_page_config(page_title="بوابة السائقين - Halago", page_icon="🛵", layout="wide")
 
 st.markdown(
     """
@@ -60,7 +60,7 @@ def store_name_from(details):
     return "المتجر المعني"
 
 
-st.title("🛵 بوابة السائقين ومناديب التوصيل - Karak Gate")
+st.title("🛵 بوابة السائقين ومناديب التوصيل -Halago")
 
 if "driver_step" not in st.session_state:
     st.session_state.driver_step = "login_or_register"
