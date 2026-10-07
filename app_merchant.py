@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="بوابة المتاجر - Karak Gate", page_icon="🔔", layout="wide"
+    page_title="Halago", page_icon="🔔", layout="wide"
 )
 
 st.markdown(
@@ -120,7 +120,10 @@ def init_merchant_db():
   cursor.execute("PRAGMA table_info(products)")
   cols = [col[1] for col in cursor.fetchall()]
   if "quantity" not in cols:
+    try:
     cursor.execute("ALTER TABLE products ADD COLUMN quantity TEXT")
+except Exception:
+    pass  # العمود موجود مسبقاً، يتم تخطي الخطأ بسلاسة
   if "unit" not in cols:
     cursor.execute("ALTER TABLE products ADD COLUMN unit TEXT")
   if "image_path" not in cols:
