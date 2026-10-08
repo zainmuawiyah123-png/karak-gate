@@ -325,6 +325,17 @@ div[data-testid="column"] .stButton > button {
 .kg-cat-card.kg-sel {
     background: transparent;
 }
+/* زر القسم يكون بعرض النص فقط وليس بعرض العمود كاملًا */
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 3px 8px !important;
+    margin: 0 auto !important;
+    display: block !important;
+    font-size: 11px !important;
+    min-height: 28px !important;
+}
 .kg-home-title { color:#FFFFFF !important; font-size:27px; font-weight:900; margin:0; }
 .kg-home-sub { color:#FFF7F2 !important; font-size:13px; margin-top:5px; }
 .kg-location { color:#FFFFFF !important; font-size:14px; margin-bottom:13px; }
@@ -1041,7 +1052,7 @@ if st.session_state.nav_tab == "الرئيسية":
                         unsafe_allow_html=True
                     )
                     btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
-                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
+                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=False):
                         st.session_state.selected_category = c_name
                         st.query_params["cat"] = c_name
                         st.session_state.search_query = ""
