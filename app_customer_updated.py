@@ -34,6 +34,7 @@ import re
 import time
 import base64
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -69,12 +70,23 @@ def push_ready():
         return False
 
 
+def _setting_value(name):
+    """قراءة الإعداد من Render أولاً ثم من Streamlit Secrets."""
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    try:
+        return str(st.secrets.get(name, "") or "").strip()
+    except Exception:
+        return ""
+
+
 def telegram_send(text):
-    """إرسال إشعار تيليجرام عند ضبط TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID."""
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    """إرسال إشعار تيليجرام وإرجاع (نجح، رسالة تشخيصية)."""
+    token = _setting_value("8812823160:AAFw5fhD938dLSLEk2gqHR_6IBQiuNrZtMk")
+    chat_id = _setting_value("8670351802")
     if not token or not chat_id:
-        return False
+        return False, "لم يتم ضبط TELEGRAM_BOT_TOKEN أو TELEGRAM_CHAT_ID في Render."
     try:
         payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
         request = urllib.request.Request(
@@ -85,10 +97,18 @@ def telegram_send(text):
         )
         with urllib.request.urlopen(request, timeout=10) as response:
             result = json.loads(response.read().decode("utf-8"))
-        return bool(result.get("ok"))
+        if result.get("ok"):
+            return True, "تم إرسال إشعار تيليجرام."
+        return False, str(result.get("description") or "رفض Telegram الطلب.")
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            return False, str(body.get("description") or f"Telegram HTTP {exc.code}")
+        except Exception:
+            return False, f"Telegram HTTP {exc.code}"
     except Exception:
         # لا نمنع تسجيل الطلب إذا كان تيليجرام متوقفًا أو إعداداته ناقصة.
-        return False
+        return False, "تعذر الاتصال بواجهة Telegram API."
 
 
 PUSH_ON = PUSH_IMPORT_OK and push_ready()
@@ -311,7 +331,11 @@ div[data-testid="column"] .stButton > button {
 .kg-location b { color:#FFFFFF !important; }
 .kg-search-hint { background:#FFFFFF; color:#64748B !important; border-radius:28px; padding:13px 18px; font-size:15px; margin-top:13px; box-shadow:0 3px 10px rgba(0,0,0,.12); }
 .kg-section-title { font-size:20px; font-weight:900; color:#202124 !important; margin:20px 0 10px; }
-.kg-promo { background:linear-gradient(105deg,#FFF0E5,#FFE0CC); border-radius:22px; padding:20px; min-height:145px; margin:18px 0; border:1px solid #FFE0CC; overflow:hidden; }
+.kg-promo { position:relative; background:linear-gradient(105deg,#FFF0E5,#FFE0CC); border-radius:22px; padding:0; height:152px; margin:18px 0; border:1px solid #FFE0CC; overflow:hidden; }
+.kg-slide { position:absolute; inset:0; padding:20px; opacity:0; animation:kgSlide 15s infinite; }
+.kg-slide:nth-child(2) { animation-delay:5s; background:linear-gradient(105deg,#FFF4D9,#FFE9A8); }
+.kg-slide:nth-child(3) { animation-delay:10s; background:linear-gradient(105deg,#E9F8FF,#CDEEFF); }
+@keyframes kgSlide { 0%,28%{opacity:1} 33%,95%{opacity:0} 100%{opacity:1} }
 .kg-promo-title { color:#5B1710 !important; font-size:22px; font-weight:900; line-height:1.25; max-width:58%; }
 .kg-promo-sub { color:#7A2A1C !important; font-size:13px; margin-top:8px; max-width:58%; }
 .kg-promo-badge { display:inline-block; background:#5B1710; color:#D9FF00 !important; padding:7px 12px; margin-top:13px; font-size:18px; font-weight:900; transform:rotate(-3deg); }
@@ -319,9 +343,9 @@ div[data-testid="column"] .stButton > button {
 @media (max-width: 640px) {
     .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
     .kg-header { margin-left:-12px; margin-right:-12px; }
-    .kg-cat-card { height:102px; padding:9px 3px; }
-    .kg-cat-card img { width:52px !important; height:52px !important; }
-    .kg-cat-card .kg-cat-name { font-size:12px; }
+    .kg-cat-card { height:82px; padding:5px 2px; border-radius:12px; margin-bottom:5px; }
+    .kg-cat-card img { width:42px !important; height:42px !important; margin-bottom:2px; }
+    .kg-cat-card .kg-cat-name { font-size:11px; }
     .kg-promo-title { font-size:19px; }
 }
 </style>
@@ -708,7 +732,11 @@ def place_order(cart, payment, delivery, xy, via_whatsapp=False):
             send_push("admin", 0, "Halago", f"وصل طلب جديد رقم #{oid}")
         except Exception:
             pass
-    telegram_send(wa_order_message(oid, cart, delivery, total, payment))
+    telegram_ok, telegram_message = telegram_send(wa_order_message(oid, cart, delivery, total, payment))
+    st.session_state["telegram_status"] = {
+        "ok": telegram_ok,
+        "message": telegram_message,
+    }
     wa = None
     if via_whatsapp:
         wa = f"https://wa.me/{WA_NUMBER}?text=" + urllib.parse.quote(wa_order_message(oid, cart, delivery, total, payment))
@@ -730,6 +758,12 @@ def render_cart(prefix):
     last = st.session_state.get("last_order")
     if last:
         st.success(f"🎉 تم تأكيد طلبك رقم #{last['id']} وإرساله للنظام!")
+        telegram_status = st.session_state.pop("telegram_status", None)
+        if telegram_status:
+            if telegram_status.get("ok"):
+                st.caption("✅ تم إرسال نسخة من الطلب إلى تيليجرام.")
+            else:
+                st.warning(f"⚠️ لم يصل إشعار تيليجرام: {telegram_status.get('message')}")
         if last.get("wa"):
             st.link_button("📲 اضغط هنا لإرسال الطلب على واتساب أيضًا", last["wa"], use_container_width=True)
         if st.button("إغلاق", key=f"close_last_{prefix}"):
@@ -870,9 +904,21 @@ if st.session_state.nav_tab == "الرئيسية":
     st.markdown(
         """
         <div class="kg-promo">
-            <div class="kg-promo-title">جاهز لتجربة<br>نكهة جديدة؟</div>
-            <div class="kg-promo-sub">اكتشف أفضل المتاجر والعروض القريبة منك</div>
-            <span class="kg-promo-badge">عروض يومية</span>
+            <div class="kg-slide">
+                <div class="kg-promo-title">جاهز لتجربة<br>نكهة جديدة؟</div>
+                <div class="kg-promo-sub">اكتشف أفضل المتاجر والعروض القريبة منك</div>
+                <span class="kg-promo-badge">عروض يومية</span>
+            </div>
+            <div class="kg-slide">
+                <div class="kg-promo-title">اطلب الآن<br>ووفر أكثر</div>
+                <div class="kg-promo-sub">توصيل سريع وأسعار مناسبة لباب بيتك</div>
+                <span class="kg-promo-badge">خصومات Halago</span>
+            </div>
+            <div class="kg-slide">
+                <div class="kg-promo-title">متاجر الكرك<br>بين يديك</div>
+                <div class="kg-promo-sub">مطاعم، ماركت، حلويات وأكثر في مكان واحد</div>
+                <span class="kg-promo-badge">اكتشف الآن</span>
+            </div>
         </div>
         """,
         unsafe_allow_html=True
