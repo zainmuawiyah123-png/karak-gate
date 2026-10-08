@@ -290,25 +290,27 @@ div[data-testid="column"] .stButton > button {
 
 /* ============ تصغير بطاقة الأقسام ============ */
 .kg-cat-card {
-    background: #FFFFFF;
-    border: 2px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 8px 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 12px;
+    padding: 3px 2px;
     text-align: center;
-    margin-bottom: 8px;
-    height: 88px;
+    margin: 0 auto 3px;
+    height: 70px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
 }
 .kg-cat-card img {
-    width: 38px !important;
-    height: 38px !important;
+    width: 44px !important;
+    height: 44px !important;
     object-fit: cover;
-    border-radius: 50%;
+    border-radius: 12px;
     margin-bottom: 4px;
-    border: 2px solid #F1F5F9;
+    border: 1px solid #F1F5F9;
+    background: #FFF7F0;
+    box-shadow: 0 2px 7px rgba(0,0,0,.08);
 }
 .kg-cat-card .kg-cat-name {
     font-weight: 800;
@@ -321,9 +323,7 @@ div[data-testid="column"] .stButton > button {
     padding: 0 2px;
 }
 .kg-cat-card.kg-sel {
-    background: #FFF8F5;
-    border-color: #E64A19;
-    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
+    background: transparent;
 }
 .kg-home-title { color:#FFFFFF !important; font-size:27px; font-weight:900; margin:0; }
 .kg-home-sub { color:#FFF7F2 !important; font-size:13px; margin-top:5px; }
@@ -343,8 +343,8 @@ div[data-testid="column"] .stButton > button {
 @media (max-width: 640px) {
     .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
     .kg-header { margin-left:-12px; margin-right:-12px; }
-    .kg-cat-card { height:65px; padding:2px 2px; border-radius:10px; margin-bottom:3px; }
-    .kg-cat-card img { width:42px !important; height:42px !important; margin-bottom:2px; }
+    .kg-cat-card { height:67px; padding:1px; border-radius:10px; margin-bottom:2px; }
+    .kg-cat-card img { width:44px !important; height:44px !important; margin-bottom:1px; }
     .kg-cat-card .kg-cat-name { font-size:11px; }
     .kg-promo { height:52px; border-radius:13px; }
     .kg-marquee-item { font-size:13px; margin-right:55px; }
