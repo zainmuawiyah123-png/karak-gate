@@ -235,6 +235,9 @@ div[data-testid="column"] .stButton > button {
     border-color: #E64A19;
     box-shadow: 0 6px 20px rgba(230,74,25,0.15);
 }
+.kg-store-badge { display:inline-block; background:#FFF0E6; color:#D84315 !important; border-radius:20px; padding:4px 9px; font-size:10px; font-weight:800; margin:4px 0; }
+.kg-store-meta { color:#64748B !important; font-size:11px; line-height:1.8; }
+.kg-store-meta b { color:#374151 !important; }
 .kg-cart {
     background: white;
     border-radius: 16px;
@@ -242,6 +245,7 @@ div[data-testid="column"] .stButton > button {
     border: 1px solid #E2E8F0;
     box-shadow: 0 4px 20px rgba(0,0,0,0.04);
 }
+.kg-cart-progress { background:#FFF7EF; border:1px solid #F6E6D7; border-radius:10px; padding:8px 10px; color:#7A341E !important; font-size:12px; margin:8px 0; }
 
 /* ============ إعلان علوي مشوّق ============ */
 .kg-ad {
@@ -484,6 +488,24 @@ def safe_price(value):
         return float(value or 0)
     except Exception:
         return 0.0
+
+
+def merchant_badge(merchant):
+    """شارة تسويقية من بيانات المتجر إن وُجدت، وإلا شارة آمنة افتراضية."""
+    for key in ("badge", "label", "tag"):
+        value = str(merchant.get(key) or "").strip()
+        if value:
+            return value
+    return "متجر معتمد"
+
+
+def merchant_eta(merchant):
+    """وقت تقديري قابل للتخصيص من بيانات المتجر دون إنشاء أعمدة جديدة."""
+    for key in ("delivery_time", "estimated_time", "eta"):
+        value = str(merchant.get(key) or "").strip()
+        if value:
+            return value
+    return "25–40 دقيقة"
 
 
 # ============================================================
@@ -829,6 +851,17 @@ def render_cart(prefix):
 
         st.markdown("---")
         st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
+        if subtotal < MIN_ORDER:
+            remaining = MIN_ORDER - subtotal
+            st.markdown(
+                f"<div class='kg-cart-progress'>أضف <b>{remaining:.2f} د.أ</b> للوصول إلى الحد الأدنى وإتمام الطلب.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div class='kg-cart-progress'>✅ وصلت إلى الحد الأدنى — يمكنك إتمام طلبك الآن.</div>",
+                unsafe_allow_html=True,
+            )
 
         # ===== شريط التوصيل الأصفر =====
         st.markdown(
@@ -1116,12 +1149,21 @@ if st.session_state.nav_tab == "الرئيسية":
                     sname = store.get("name", "متجر")
                     scat = store.get("category", "")
                     sloc = store.get("location", "")
+                    badge = html.escape(merchant_badge(store))
+                    eta = html.escape(merchant_eta(store))
+                    fee_value = store.get("delivery_fee")
+                    fee_text = f"من {safe_price(fee_value):.2f} د.أ" if fee_value is not None else "تحسب حسب الموقع"
 
                     with s_cols[sj]:
                         st.markdown('<div class="kg-store-card">', unsafe_allow_html=True)
                         display_image(store.get("image_data"), width=90, fallback="🏬")
-                        st.markdown(f"<div style='font-size:18px; font-weight:900; margin:10px 0 4px 0;'>{sname}</div>", unsafe_allow_html=True)
-                        st.caption(f"التصنيف: {scat} | الموقع: {sloc}")
+                        st.markdown(f"<div style='font-size:18px; font-weight:900; margin:10px 0 4px 0;'>{html.escape(str(sname))}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<span class='kg-store-badge'>✓ {badge}</span>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"<div class='kg-store-meta'>📍 {html.escape(str(scat))} • {html.escape(str(sloc))}<br>"
+                            f"🚚 وقت تقديري: <b>{eta}</b> • رسوم التوصيل: <b>{fee_text}</b></div>",
+                            unsafe_allow_html=True,
+                        )
 
                         # ===== تقييم المتجر =====
                         render_rating(store)
