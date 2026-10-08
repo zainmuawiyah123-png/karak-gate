@@ -149,7 +149,7 @@ st.markdown(
 html, body, .stApp, button, input, textarea, select { font-family: 'Tajawal', sans-serif !important; }
 #MainMenu, .stDeployButton, header, footer { visibility: hidden; display: none; }
 .stApp { background: #F8F6FF !important; color: #1F1B3A !important; }
-.block-container { padding-top: 0.8rem !important; padding-bottom: 3rem !important; max-width: 1400px !important; }
+.block-container { padding-top:0.8rem !important; padding-bottom: 3rem !important; max-width: 1400px !important; }
 h1, h2, h3, h4, h5, h6, p, label, span { color: #1F1B3A !important; }
 div[data-testid="column"] .stButton > button {
     background: #7C3AED !important; color: #FFFFFF !important; border-radius: 12px !important; border: 0 !important;
