@@ -221,13 +221,29 @@ def fill_images_from_off(sb, merchant, limit, progress=None):
     return len(rows), found
 
 
-def _prep_image(data):
+def _prep_image(data, size=600, quality=80):
     from PIL import Image
     im = Image.open(io.BytesIO(data)).convert("RGB")
-    im.thumbnail((600, 600))
+    im.thumbnail((size, size))
     buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=80, optimize=True)
+    im.save(buf, "JPEG", quality=quality, optimize=True)
     return buf.getvalue()
+
+
+def save_uploaded_image(uploaded_file, storage_sb, merchant, key):
+    """يضغط الصورة المرفوعة: رابط عام في Supabase Storage إن توفر، وإلا صورة مصغّرة داخل النص (data URI)."""
+    if uploaded_file is None:
+        return ""
+    raw = uploaded_file.getvalue()
+    try:
+        if storage_sb is not None:
+            path = f"{hashlib.md5(merchant.encode()).hexdigest()[:8]}/{hashlib.md5(str(key).encode()).hexdigest()[:16]}_{int(time.time())}.jpg"
+            storage_sb.storage.from_(BUCKET).upload(path, _prep_image(raw), {"content-type": "image/jpeg", "upsert": "true"})
+            return storage_sb.storage.from_(BUCKET).get_public_url(path)
+        import base64
+        return "data:image/jpeg;base64," + base64.b64encode(_prep_image(raw, 400, 70)).decode()
+    except Exception:
+        return ""
 
 
 def _zip_image_names(zf):
