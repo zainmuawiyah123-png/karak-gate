@@ -7,25 +7,8 @@ import base64
 import html
 from datetime import datetime
 import streamlit as st
-hide_streamlit_style = """
-<style>
-/* إخفاء التذييل وشريط الحالة */
-footer,
-[data-testid="stFooter"],
-[data-testid="stStatusWidget"] {
-    display: none !important;
-}
+from supabase import create_client
 
-/* إخفاء شارة GitHub / النشر */
-.stAppDeployButton,
-[data-testid="stAppDeployButton"],
-[data-testid="stGitHubIcon"],
-a[href*="github.com"] {
-    display: none !important;
-}
-</style>
- unsafe_allow_html=True),
-"""
 APP_NAME = "Halago"
 
 try:
@@ -133,79 +116,171 @@ except Exception:
 st.markdown(
     """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap');
-html, body, .stApp, button, input, textarea, select { font-family: 'Tajawal', sans-serif !important; }
-#MainMenu, .stDeployButton, header, footer { visibility: hidden; display: none; }
-.stApp { background: #F8F6FF !important; color: #1F1B3A !important; }
-.block-container { padding-top:0.8rem !important; padding-bottom: 3rem !important; max-width: 1400px !important; }
-h1, h2, h3, h4, h5, h6, p, label, span { color: #1F1B3A !important; }
+#MainMenu, .stDeployButton, header, footer {
+    visibility: hidden;
+    display: none;
+}
+/* إخفاء العلامات العائمة الخاصة بـ Streamlit/الاستضافة أسفل الشاشة */
+[data-testid="stStatusWidget"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+.stAppDeployButton,
+.viewerBadge_container__1QSob,
+.viewerBadge_link__1S3i2,
+div[class*="viewerBadge"],
+div[class*="stStatusWidget"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+.stApp {
+    background: linear-gradient(135deg, #F4F6F8 0%, #E9ECEF 100%) !important;
+    color: #2D3142 !important;
+}
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 3rem !important;
+    max-width: 1400px !important;
+}
+h1, h2, h3, h4, h5, h6, p, label, span {
+    color: #2D3142 !important;
+}
 div[data-testid="column"] .stButton > button {
-    background: #7C3AED !important; color: #FFFFFF !important; border-radius: 12px !important; border: 0 !important;
-    font-weight: 800 !important; font-size: 13px !important; padding: 6px 12px !important; min-height: 38px !important;
-    margin: 4px auto 0 auto !important; display: block !important; width: 100% !important;
+    background: #FF5722 !important;
+    color: #FFFFFF !important;
+    border-radius: 8px !important;
+    border: 0 !important;
+    font-weight: bold !important;
+    font-size: 13px !important;
+    padding: 6px 12px !important;
+    min-height: 36px !important;
+    margin: 4px auto 0 auto !important;
+    display: block !important;
+    width: 100% !important;
 }
-div[data-testid="column"] .stButton > button:hover { background: #6D28D9 !important; }
-.stTextInput input, .stTextArea textarea { border-radius: 14px !important; }
-
-/* ===== الترويسة البنفسجية ===== */
-.hl-header {
-    background: linear-gradient(135deg, #5B21B6 0%, #7C3AED 55%, #9333EA 100%);
-    border-radius: 26px; padding: 18px 22px 20px; margin-bottom: 14px;
-    box-shadow: 0 10px 26px rgba(109,40,217,.30);
+.kg-header {
+    background: linear-gradient(135deg, #E64A19, #FF7043);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
 }
-.hl-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.hl-addr { color: #FFFFFF !important; font-size: 14px; font-weight: 700; opacity: .95; }
-.hl-bag { width: 44px; height: 44px; border-radius: 50%; background: #FFFFFF; display: flex;
-    align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 10px rgba(0,0,0,.15); }
-.hl-title { color: #FFFFFF !important; font-size: 28px; font-weight: 900; margin: 6px 0 2px; }
-.hl-sub { color: #FFFFFF !important; font-size: 13px; opacity: .92; }
-.kg-header { background: linear-gradient(135deg, #5B21B6, #9333EA); border-radius: 22px; padding: 14px 18px;
-    margin-bottom: 15px; box-shadow: 0 8px 20px rgba(109,40,217,.25); }
-.kg-header-title { color: #FFFFFF !important; font-size: 20px; font-weight: 900; margin: 0; }
-.kg-header-sub { color: #FFFFFF !important; font-size: 12px; margin: 0; opacity: .92; }
+.kg-header-title {
+    color: white !important;
+    font-size: 20px;
+    font-weight: 800;
+    margin: 0;
+}
+.kg-header-sub {
+    color: white !important;
+    font-size: 12px;
+    margin: 0;
+    opacity: 0.9;
+}
+.kg-store-card {
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 15px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.kg-store-card:hover {
+    border-color: #E64A19;
+    box-shadow: 0 6px 20px rgba(230,74,25,0.15);
+}
+.kg-cart {
+    background: white;
+    border-radius: 16px;
+    padding: 18px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+}
 
-/* ===== شريط الإعلانات المتحرك ===== */
-.hl-ads { overflow: hidden; direction: ltr; margin: 4px 0 16px; border-radius: 22px; }
-.hl-track { display: flex; width: max-content; animation: hlslide 38s linear infinite; }
-.hl-ads:hover .hl-track { animation-play-state: paused; }
-@keyframes hlslide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.hl-ad { direction: rtl; text-align: right; min-width: 272px; max-width: 272px; height: 132px; margin-right: 12px;
-    border-radius: 22px; padding: 16px 20px; display: flex; flex-direction: column; justify-content: center; gap: 7px;
-    box-shadow: 0 8px 20px rgba(0,0,0,.12); }
-.hl-ad .tag { align-self: flex-start; background: #D9FF3F; color: #1F1B3A !important; font-weight: 800; font-size: 12px;
-    padding: 3px 14px; border-radius: 20px; }
-.hl-ad .t { font-size: 20px; font-weight: 900; color: #FFFFFF !important; line-height: 1.25; }
-.hl-ad .s { font-size: 13px; color: #FFFFFF !important; opacity: .93; }
-.hl-purple { background: linear-gradient(135deg, #6D28D9, #9333EA); }
-.hl-orange { background: linear-gradient(135deg, #FF6A00, #FF8F3D); }
-.hl-green  { background: linear-gradient(135deg, #059669, #10B981); }
-.hl-blue   { background: linear-gradient(135deg, #1D4ED8, #3B82F6); }
+/* ============ إعلان علوي مشوّق ============ */
+.kg-ad {
+    background: linear-gradient(135deg, #0B3D91 0%, #1565C0 50%, #0B3D91 100%);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 15px;
+    text-align: center;
+    color: #FFD700 !important;
+    font-weight: 800;
+    font-size: 15px;
+    box-shadow: 0 4px 15px rgba(11,61,145,0.35);
+    border: 2px solid #FFD700;
+    animation: kgPulse 2.5s ease-in-out infinite;
+}
+.kg-ad span { color: #FFD700 !important; }
+@keyframes kgPulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(11,61,145,0.35); }
+    50%      { box-shadow: 0 4px 25px rgba(255,215,0,0.55); }
+}
 
-/* ===== الأقسام (مصغّرة) ===== */
-.kg-cat-ring { display: flex; justify-content: center; margin-bottom: 2px; }
-.kg-cat-ring img { width: 46px !important; height: 46px !important; object-fit: cover; border-radius: 50%;
-    border: 3px solid #E9E2FB; background: #fff; }
-.kg-cat-ring.kg-sel img { border-color: #7C3AED; box-shadow: 0 4px 12px rgba(124,58,237,.35); }
-[class*="st-key-cat_card_"] button, [class*="st-key-cat_sel_"] button {
-    min-height: 28px !important; height: 28px !important; font-size: 11px !important; padding: 0 4px !important;
-    border-radius: 14px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
-[class*="st-key-cat_card_"] button { background: #EFE9FF !important; color: #5B21B6 !important; }
-[class*="st-key-cat_sel_"] button { background: #7C3AED !important; color: #FFFFFF !important; }
-
-/* ===== بطاقات المتاجر والسلة ===== */
-.kg-store-card { background: #FFFFFF; border-radius: 22px; padding: 16px; margin-bottom: 15px; border: 1px solid #ECE7FA;
-    box-shadow: 0 6px 18px rgba(109,40,217,.07); text-align: center; transition: all .25s ease; }
-.kg-store-card:hover { border-color: #7C3AED; box-shadow: 0 10px 24px rgba(124,58,237,.18); transform: translateY(-2px); }
-.kg-cart { background: #FFFFFF; border-radius: 22px; padding: 18px; border: 1px solid #ECE7FA;
-    box-shadow: 0 6px 20px rgba(109,40,217,.07); }
-.kg-delivery-bar { background: linear-gradient(90deg, #FFD700 0%, #FFEB3B 100%); border: 2px solid #F9A825; border-radius: 14px;
-    padding: 10px 14px; margin: 10px 0; color: #4A3800 !important; font-weight: 800; text-align: center; font-size: 14px; }
+/* ============ شريط التوصيل الأصفر ============ */
+.kg-delivery-bar {
+    background: linear-gradient(90deg, #FFD700 0%, #FFEB3B 100%);
+    border: 2px solid #F9A825;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    color: #4A3800 !important;
+    font-weight: 800;
+    text-align: center;
+    font-size: 14px;
+}
 .kg-delivery-bar span { color: #4A3800 !important; }
-.kg-rating { color: #F59E0B !important; font-size: 14px; margin-top: 4px; font-weight: 800; }
-.kg-review { background: #FFFFFF; border: 1px solid #ECE7FA; border-radius: 14px; padding: 10px 14px; margin: 6px 0; font-size: 13px; }
 
-@keyframes kgfade { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+/* ============ نجوم التقييم ============ */
+.kg-rating {
+    color: #F9A825 !important;
+    font-size: 14px;
+    margin-top: 4px;
+    font-weight: 700;
+}
+
+@keyframes kgfade { from {opacity:0; transform:scale(.92);} to {opacity:1; transform:scale(1);} }
 @keyframes kgspin { to { transform: rotate(360deg); } }
+
+/* ============ تصغير بطاقة الأقسام ============ */
+.kg-cat-card {
+    background: #FFFFFF;
+    border: 2px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 8px 4px;
+    text-align: center;
+    margin-bottom: 8px;
+    height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.kg-cat-card img {
+    width: 38px !important;
+    height: 38px !important;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-bottom: 4px;
+    border: 2px solid #F1F5F9;
+}
+.kg-cat-card .kg-cat-name {
+    font-weight: 800;
+    font-size: 11px;
+    color: #2D3142 !important;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 2px;
+}
+.kg-cat-card.kg-sel {
+    background: #FFF8F5;
+    border-color: #E64A19;
+    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
+}
 </style>
 """,
     unsafe_allow_html=True
@@ -221,13 +296,13 @@ if not st.session_state.get("splash_done"):
         """
         <div style="position:fixed; inset:0; z-index:999999; display:flex; flex-direction:column;
                     align-items:center; justify-content:center; text-align:center;
-                    background:linear-gradient(135deg,#4C1D95 0%,#7C3AED 55%,#9333EA 100%);">
+                    background:linear-gradient(135deg,#0B3D91 0%,#1565C0 100%);">
             <div style="font-size:84px; animation:kgfade .8s ease both;">🛒</div>
-            <div style="font-size:44px; font-weight:900; color:#D9FF3F !important; animation:kgfade 1s ease both; letter-spacing:1px;">Halago</div>
+            <div style="font-size:44px; font-weight:900; color:#FFD700 !important; animation:kgfade 1s ease both; letter-spacing:1px;">Halago</div>
             <div style="font-size:15px; color:#FFFFFF !important; opacity:.9; margin-top:6px;">هلا بك... اطلب براحة</div>
-            <div style="font-size:15px; color:#D9FF3F !important; opacity:.95; margin-top:14px;">اطلب ما تريد من متاجر الكرك بكل سهولة</div>
-            <div style="margin-top:28px; width:34px; height:34px; border:4px solid rgba(217,255,63,.35);
-                        border-top-color:#D9FF3F; border-radius:50%; animation:kgspin 1s linear infinite;"></div>
+            <div style="font-size:15px; color:#FFD700 !important; opacity:.95; margin-top:14px;">اطلب ما تريد من متاجر الكرك بكل سهولة</div>
+            <div style="margin-top:28px; width:34px; height:34px; border:4px solid rgba(255,215,0,.35);
+                        border-top-color:#FFD700; border-radius:50%; animation:kgspin 1s linear infinite;"></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -354,132 +429,24 @@ def display_image(value, width=100, fallback="🛒"):
 
 
 # ============================================================
-# تقييمات الزبائن للمتاجر (جدول store_ratings) + الإعلانات (جدول ads)
+# التقييم اليدوي (نجوم من حقل rating في جدول merchants)
 # ============================================================
-def stars_text(avg):
-    full = max(0, min(5, int(round(avg))))
-    return "★" * full + "☆" * (5 - full)
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_rating_summary():
-    """{اسم المتجر: (المتوسط، عدد التقييمات)}"""
-    try:
-        rows = sb.table("store_ratings").select("merchant_name,stars").limit(20000).execute().data or []
-    except Exception:
-        return {}
-    agg = {}
-    for r in rows:
-        a = agg.setdefault(r.get("merchant_name"), [0, 0])
-        a[0] += int(r.get("stars") or 0)
-        a[1] += 1
-    return {k: (v[0] / v[1], v[1]) for k, v in agg.items() if v[1]}
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_reviews(merchant):
-    try:
-        return (sb.table("store_ratings").select("stars,comment,created_at").eq("merchant_name", merchant)
-                .order("id", desc=True).limit(30).execute().data or [])
-    except Exception:
-        return []
-
-
 def render_rating(merchant):
-    """نجوم + المتوسط + عدد تقييمات الزبائن (وإن لم توجد تُعرض قيمة rating اليدوية إن وُجدت)."""
-    name = merchant.get("name")
-    avg, cnt = load_rating_summary().get(name, (0.0, 0))
-    if cnt:
-        st.markdown(f"<div class='kg-rating'>{stars_text(avg)} <span style='color:#64748B !important; font-weight:600;'>"
-                    f"{avg:.1f} ({cnt} تقييم)</span></div>", unsafe_allow_html=True)
+    """يعرض نجوم التقييم من الحقل rating (0-5)."""
+    try:
+        rating = float(merchant.get("rating") or 0)
+    except Exception:
+        rating = 0.0
+    if rating <= 0:
         return
-    try:
-        manual = float(merchant.get("rating") or 0)
-    except Exception:
-        manual = 0.0
-    if manual > 0:
-        st.markdown(f"<div class='kg-rating'>{stars_text(manual)} <span style='color:#64748B !important; font-weight:600;'>{manual:.1f}</span></div>",
-                    unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='kg-rating' style='color:#94A3B8 !important; font-weight:600;'>☆ لا تقييمات بعد</div>", unsafe_allow_html=True)
-
-
-def render_reviews(merchant_name):
-    reviews = [r for r in load_reviews(merchant_name) if (r.get("comment") or "").strip()][:5]
-    if reviews:
-        with st.expander(f"💬 آراء الزبائن ({len(reviews)})"):
-            for r in reviews:
-                st.markdown(f"<div class='kg-review'><span style='color:#F59E0B !important;'>{stars_text(r.get('stars') or 0)}</span> "
-                            f"— {html.escape(str(r.get('comment')))}</div>", unsafe_allow_html=True)
-
-
-def store_names_of(order):
-    return list(dict.fromkeys(n.strip() for n in re.findall(r"\[المتجر:\s*([^\]]+)\]", str(order.get("order_details") or ""))))
-
-
-def render_rating_form(order):
-    """بعد توصيل الطلب: يقيّم الزبون كل متجر مرة واحدة لكل طلب (نجوم + تعليق اختياري)."""
-    if order.get("order_status") != "تم التوصيل":
-        return
-    try:
-        mine = sb.table("store_ratings").select("merchant_name,order_id,stars").eq("customer_phone", st.session_state.phone).execute().data or []
-    except Exception:
-        return    # الجدول غير موجود بعد (شغّل supabase_update_3.sql)
-    done = {(r["merchant_name"], r["order_id"]): r["stars"] for r in mine}
-    oid = order.get("id")
-    for si, sname in enumerate(store_names_of(order)):
-        if (sname, oid) in done:
-            st.markdown(f"✅ قيّمت **{sname}**: <span style='color:#F59E0B !important;'>{stars_text(done[(sname, oid)])}</span>", unsafe_allow_html=True)
-            continue
-        with st.expander(f"⭐ قيّم متجر {sname}"):
-            val = st.radio("تقييمك", [5, 4, 3, 2, 1], index=None, horizontal=True,
-                           format_func=lambda n: "★" * n + "☆" * (5 - n), key=f"rate_{oid}_{si}")
-            comment = st.text_input("تعليق (اختياري)", max_chars=140, key=f"rate_c_{oid}_{si}")
-            if st.button("إرسال التقييم", key=f"rate_go_{oid}_{si}"):
-                if not val:
-                    st.error("اختر عدد النجوم أولًا.")
-                else:
-                    try:
-                        sb.table("store_ratings").insert({
-                            "merchant_name": sname, "customer_phone": st.session_state.phone, "order_id": oid,
-                            "stars": int(val), "comment": comment.strip()}).execute()
-                        load_rating_summary.clear()
-                        load_reviews.clear()
-                        st.success("شكرًا لتقييمك!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"تعذر حفظ التقييم: {e}")
-
-
-DEFAULT_ADS = [
-    {"tag": "سريع", "title": "توصيل سريع لباب بيتك", "subtitle": "من متاجر الكرك المعتمدة", "color": "purple"},
-    {"tag": "جديد", "title": "اطلب من أكثر من متجر", "subtitle": "سلة واحدة وفاتورة واحدة", "color": "orange"},
-    {"tag": "تقييمك يهمنا", "title": "قيّم متجرك بعد التوصيل", "subtitle": "ساعد غيرك على اختيار الأفضل", "color": "purple"},
-    {"tag": "الدفع", "title": "نقداً أو CliQ أو Zain Cash", "subtitle": "اختر الأنسب لك عند التأكيد", "color": "green"},
-]
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def load_ads():
-    """إعلانات من جدول ads (تديرها الإدارة)، وإلا الإعلانات الافتراضية."""
-    try:
-        rows = sb.table("ads").select("*").eq("active", True).order("sort").limit(12).execute().data or []
-        if rows:
-            return [{"tag": r.get("tag") or "", "title": r.get("title") or "", "subtitle": r.get("subtitle") or "",
-                     "color": r.get("color") or "purple"} for r in rows]
-    except Exception:
-        pass
-    return DEFAULT_ADS
-
-
-def render_ads():
-    cards = ""
-    for a in load_ads():
-        color = a["color"] if a["color"] in ("purple", "orange", "green", "blue") else "purple"
-        tag = f"<div class='tag'>{html.escape(a['tag'])}</div>" if a["tag"] else ""
-        cards += (f"<div class='hl-ad hl-{color}'>{tag}<div class='t'>{html.escape(a['title'])}</div>"
-                  f"<div class='s'>{html.escape(a['subtitle'])}</div></div>")
-    st.markdown(f"<div class='hl-ads'><div class='hl-track'>{cards}{cards}</div></div>", unsafe_allow_html=True)
+    full = int(rating)
+    half = 1 if (rating - full) >= 0.5 else 0
+    empty = 5 - full - half
+    stars = "★" * full + ("⯨" if half else "") + "☆" * empty
+    st.markdown(
+        f"<div class='kg-rating'>{stars} <span style='color:#64748B !important; font-weight:500;'>({rating:.1f})</span></div>",
+        unsafe_allow_html=True
+    )
 
 
 # ============================================================
@@ -841,19 +808,26 @@ with nav_cols[2]:
 # ============================================================
 if st.session_state.nav_tab == "الرئيسية":
 
-    _addr = html.escape((st.session_state.customer_address or "").strip()[:42]) or "حدد عنوانك من صفحة حسابي"
     st.markdown(
-        f"""
-        <div class="hl-header">
-            <div class="hl-top"><div class="hl-addr">📍 {_addr}</div><div class="hl-bag">🛍️</div></div>
-            <div class="hl-title">🛒 Halago</div>
-            <div class="hl-sub">هلا بك • اطلب ما تريد من متاجر الكرك بكل سهولة</div>
+        """
+        <div class="kg-header">
+            <div class="kg-header-title">🛒 Halago</div>
+            <div class="kg-header-sub">هلا بك • اطلب ما تريد من متاجر الكرك بكل سهولة</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    render_ads()
+    # ============ الإعلان المشوّق (خلفية زرقاء + نص أصفر) ============
+    st.markdown(
+        """
+        <div class="kg-ad">
+            <span>🎉 اطلب الآن من Halago واستمتع بتوصيل سريع لباب بيتك! 🎉</span><br>
+            <span style="font-size:13px;">✨ عروض يومية • متاجر موثوقة • خدمة مميزة 24/7 ✨</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     all_merchants = load_merchants()
 
@@ -873,7 +847,7 @@ if st.session_state.nav_tab == "الرئيسية":
             st.markdown(f"""
             <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow:0 4px 15px rgba(0,0,0,0.03); display:flex; align-items:center; gap:15px;">
                 <div>
-                    <div style="font-size:24px; font-weight:900; color:#7C3AED;">🏬 {mname}</div>
+                    <div style="font-size:24px; font-weight:900; color:#E64A19;">🏬 {mname}</div>
                     <div style="font-size:13px; color:#64748B; margin-top:4px;">التصنيف: <b>{m_data.get('category','')}</b> | الموقع: {m_data.get('location','')}</div>
                 </div>
             </div>
@@ -881,10 +855,9 @@ if st.session_state.nav_tab == "الرئيسية":
 
             # ===== تقييم المتجر (نجوم) =====
             render_rating(m_data)
-            render_reviews(mname)
 
             if m_data.get("map_link"):
-                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#7C3AED; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
             sq = st.text_input("🔎 ابحث عن صنف داخل هذا المتجر...", value=st.session_state.store_q, key="store_q_input")
             if sq.strip() != st.session_state.store_q:
@@ -913,7 +886,7 @@ if st.session_state.nav_tab == "الرئيسية":
 
                     with p_col2:
                         st.markdown(f"<div style='font-size:16px; font-weight:bold; margin-top:5px;'>{item_name}</div>", unsafe_allow_html=True)
-                        st.caption(f"{quantity} {unit} | <span style='color:#7C3AED; font-weight:bold; font-size:14px;'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
+                        st.caption(f"{quantity} {unit} | <span style='color:#E64A19; font-weight:bold; font-size:14px;'>{price:.2f} د.أ</span>", unsafe_allow_html=True)
 
                     with p_col3:
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -955,9 +928,9 @@ if st.session_state.nav_tab == "الرئيسية":
         if user_input != st.session_state.search_query:
             st.session_state.search_query = user_input
 
-        st.subheader("📁 الأقسام")
+        st.subheader("📁 الأقسام الرئيسية")
 
-        # ===== أقسام مصغّرة: صورة دائرية + زر باسم القسم (صف أو صفان فقط) =====
+        # ===== بطاقات الأقسام (مصغّرة) =====
         cols_per_row = 4
         for i in range(0, len(categories), cols_per_row):
             row_cats = categories[i:i + cols_per_row]
@@ -966,9 +939,20 @@ if st.session_state.nav_tab == "الرئيسية":
                 c_name = cat["name"]
                 c_img = cat["image"]
                 is_sel = (st.session_state.selected_category == c_name)
+                sel_class = "kg-sel" if is_sel else ""
+
                 with c_cols[j]:
-                    st.markdown(f'<div class="kg-cat-ring {"kg-sel" if is_sel else ""}"><img src="{c_img}"></div>', unsafe_allow_html=True)
-                    if st.button(c_name, key=f"{'cat_sel_' if is_sel else 'cat_card_'}{i+j}", use_container_width=True):
+                    st.markdown(
+                        f"""
+                        <div class="kg-cat-card {sel_class}">
+                            <img src="{c_img}">
+                            <div class="kg-cat-name">{c_name}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
+                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=True):
                         st.session_state.selected_category = c_name
                         st.query_params["cat"] = c_name
                         st.session_state.search_query = ""
@@ -1067,8 +1051,8 @@ elif st.session_state.nav_tab == "الطلبات":
                 st.markdown(f"""
                 <div style="background:white; border-radius:16px; padding:20px; margin-bottom:15px; border:1px solid #E2E8F0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <span style="font-size:16px; font-weight:900; color:#7C3AED;">رقم الطلب: #{ord_item.get('id')}</span>
-                        <span style="background:#F3EEFF; color:#7C3AED; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
+                        <span style="font-size:16px; font-weight:900; color:#E64A19;">رقم الطلب: #{ord_item.get('id')}</span>
+                        <span style="background:#FFF3EE; color:#E64A19; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:12px;">الحالة: {status}</span>
                     </div>
                     <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>وقت الطلب:</b> {ord_item.get('created_at')}</p>
                     <p style="margin:5px 0; font-size:13px; color:#64748B;"><b>المبلغ الإجمالي:</b> {ord_item.get('total_amount')} د.أ</p>
@@ -1080,7 +1064,7 @@ elif st.session_state.nav_tab == "الطلبات":
                 for s_idx, s_name in enumerate(steps):
                     with prog_cols[s_idx]:
                         if s_idx <= current_step_idx:
-                            st.markdown(f"<div style='background:#7C3AED; color:white; padding:6px; border-radius:8px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:#E64A19; color:white; padding:6px; border-radius:8px; text-align:center; font-size:11px; font-weight:bold;'>✓ {s_name}</div>", unsafe_allow_html=True)
                         else:
                             st.markdown(f"<div style='background:#F1F5F9; color:#94A3B8; padding:6px; border-radius:8px; text-align:center; font-size:11px;'>{s_name}</div>", unsafe_allow_html=True)
 
@@ -1098,8 +1082,6 @@ elif st.session_state.nav_tab == "الطلبات":
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
-
-                render_rating_form(ord_item)
 
                 st.markdown("</div>", unsafe_allow_html=True)
         else:
@@ -1154,7 +1136,7 @@ elif st.session_state.nav_tab == "الحساب":
                 st.error(f"خطأ أثناء الحفظ: {e}")
 
     if st.session_state.customer_map_link:
-        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#F5F0FF; border:1px solid #7C3AED; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#7C3AED; font-weight:bold; text-decoration:none;">🗺 معاينة موقعك المسجل على خرائط جوجل</a></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 معاينة موقعك المسجل على خرائط جوجل</a></div>', unsafe_allow_html=True)
         if GEO_OK:
             if customer_xy():
                 st.caption("✅ تم التعرّف على إحداثيات موقعك، وسيظهر للسائق على الخريطة.")
