@@ -83,8 +83,8 @@ def _setting_value(name):
 
 def telegram_send(text):
     """إرسال إشعار تيليجرام وإرجاع (نجح، رسالة تشخيصية)."""
-    token = _setting_value("8812823160:AAFw5fhD938dLSLEk2gqHR_6IBQiuNrZtMk")
-    chat_id = _setting_value("8670351802")
+    token = _setting_value("TELEGRAM_BOT_TOKEN")
+    chat_id = _setting_value("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         return False, "لم يتم ضبط TELEGRAM_BOT_TOKEN أو TELEGRAM_CHAT_ID في Render."
     try:
@@ -331,11 +331,11 @@ div[data-testid="column"] .stButton > button {
 .kg-location b { color:#FFFFFF !important; }
 .kg-search-hint { background:#FFFFFF; color:#64748B !important; border-radius:28px; padding:13px 18px; font-size:15px; margin-top:13px; box-shadow:0 3px 10px rgba(0,0,0,.12); }
 .kg-section-title { font-size:20px; font-weight:900; color:#202124 !important; margin:20px 0 10px; }
-.kg-promo { position:relative; background:linear-gradient(105deg,#FFF0E5,#FFE0CC); border-radius:22px; padding:0; height:152px; margin:18px 0; border:1px solid #FFE0CC; overflow:hidden; }
-.kg-slide { position:absolute; inset:0; padding:20px; opacity:0; animation:kgSlide 15s infinite; }
-.kg-slide:nth-child(2) { animation-delay:5s; background:linear-gradient(105deg,#FFF4D9,#FFE9A8); }
-.kg-slide:nth-child(3) { animation-delay:10s; background:linear-gradient(105deg,#E9F8FF,#CDEEFF); }
-@keyframes kgSlide { 0%,28%{opacity:1} 33%,95%{opacity:0} 100%{opacity:1} }
+.kg-promo { background:#FFF0E5; border-radius:16px; padding:0; height:58px; margin:16px 0; border:1px solid #FFE0CC; overflow:hidden; display:flex; align-items:center; }
+.kg-marquee { display:flex; width:max-content; white-space:nowrap; animation:kgMarquee 24s linear infinite; direction:ltr; }
+.kg-marquee-item { display:inline-flex; align-items:center; gap:10px; margin-right:80px; color:#5B1710 !important; font-size:15px; font-weight:900; }
+.kg-marquee-item b { background:#5B1710; color:#D9FF00 !important; border-radius:6px; padding:5px 10px; }
+@keyframes kgMarquee { from { transform:translateX(0); } to { transform:translateX(-50%); } }
 .kg-promo-title { color:#5B1710 !important; font-size:22px; font-weight:900; line-height:1.25; max-width:58%; }
 .kg-promo-sub { color:#7A2A1C !important; font-size:13px; margin-top:8px; max-width:58%; }
 .kg-promo-badge { display:inline-block; background:#5B1710; color:#D9FF00 !important; padding:7px 12px; margin-top:13px; font-size:18px; font-weight:900; transform:rotate(-3deg); }
@@ -343,10 +343,11 @@ div[data-testid="column"] .stButton > button {
 @media (max-width: 640px) {
     .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
     .kg-header { margin-left:-12px; margin-right:-12px; }
-    .kg-cat-card { height:82px; padding:5px 2px; border-radius:12px; margin-bottom:5px; }
+    .kg-cat-card { height:65px; padding:2px 2px; border-radius:10px; margin-bottom:3px; }
     .kg-cat-card img { width:42px !important; height:42px !important; margin-bottom:2px; }
     .kg-cat-card .kg-cat-name { font-size:11px; }
-    .kg-promo-title { font-size:19px; }
+    .kg-promo { height:52px; border-radius:13px; }
+    .kg-marquee-item { font-size:13px; margin-right:55px; }
 }
 </style>
 """,
@@ -900,24 +901,17 @@ if st.session_state.nav_tab == "الرئيسية":
         unsafe_allow_html=True
     )
 
-    # ============ بانر تسويقي ============
+    # ============ شريط إعلانات متحرك مستمر ============
     st.markdown(
         """
         <div class="kg-promo">
-            <div class="kg-slide">
-                <div class="kg-promo-title">جاهز لتجربة<br>نكهة جديدة؟</div>
-                <div class="kg-promo-sub">اكتشف أفضل المتاجر والعروض القريبة منك</div>
-                <span class="kg-promo-badge">عروض يومية</span>
-            </div>
-            <div class="kg-slide">
-                <div class="kg-promo-title">اطلب الآن<br>ووفر أكثر</div>
-                <div class="kg-promo-sub">توصيل سريع وأسعار مناسبة لباب بيتك</div>
-                <span class="kg-promo-badge">خصومات Halago</span>
-            </div>
-            <div class="kg-slide">
-                <div class="kg-promo-title">متاجر الكرك<br>بين يديك</div>
-                <div class="kg-promo-sub">مطاعم، ماركت، حلويات وأكثر في مكان واحد</div>
-                <span class="kg-promo-badge">اكتشف الآن</span>
+            <div class="kg-marquee">
+                <span class="kg-marquee-item">🎉 جاهز لتجربة نكهة جديدة؟ <b>عروض يومية</b></span>
+                <span class="kg-marquee-item">🚚 اطلب الآن ووفر أكثر <b>توصيل سريع</b></span>
+                <span class="kg-marquee-item">🏬 متاجر الكرك بين يديك <b>اكتشف الآن</b></span>
+                <span class="kg-marquee-item">🎉 جاهز لتجربة نكهة جديدة؟ <b>عروض يومية</b></span>
+                <span class="kg-marquee-item">🚚 اطلب الآن ووفر أكثر <b>توصيل سريع</b></span>
+                <span class="kg-marquee-item">🏬 متاجر الكرك بين يديك <b>اكتشف الآن</b></span>
             </div>
         </div>
         """,
