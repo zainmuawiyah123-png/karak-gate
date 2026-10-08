@@ -16,11 +16,10 @@ footer {visibility: hidden !important;}
 div[data-testid="stToolbar"] {visibility: hidden !important;}
 div[data-testid="stDecoration"] {visibility: hidden !important;}
 </style>
+"""
 
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-  
-from supabase import create_client
-  
+
 from supabase import create_client
 
 APP_NAME = "Halago"
