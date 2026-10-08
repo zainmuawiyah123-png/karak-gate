@@ -490,6 +490,51 @@ def safe_price(value):
         return 0.0
 
 
+def coords_from_customer_link(link):
+    """استخراج latitude/longitude من روابط Google Maps العادية والمختصرة."""
+    raw = str(link or "").strip()
+    if not raw:
+        return None
+
+    candidates = [raw]
+    if raw.startswith(("http://", "https://")) and ("maps.app.goo.gl" in raw or "goo.gl/maps" in raw):
+        try:
+            req = urllib.request.Request(raw, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=6) as response:
+                candidates.append(response.geturl())
+        except Exception:
+            pass
+
+    for candidate in candidates:
+        text = urllib.parse.unquote(str(candidate)).replace("%2C", ",")
+        patterns = (
+            r"[?&](?:q|query|ll|center)=(-?\d{1,3}(?:\.\d+)?)[, ](-?\d{1,3}(?:\.\d+)?)",
+            r"@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)",
+            r"!3d(-?\d{1,3}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                lat, lng = float(match.group(1)), float(match.group(2))
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    return lat, lng
+    return None
+
+
+def customer_map_coords(link):
+    """استخدم driver_map إن توفر، وإلا استخدم المحلل الداخلي."""
+    if not link:
+        return None
+    if GEO_OK:
+        try:
+            result = coords_from_map_link(link)
+            if result:
+                return result
+        except Exception:
+            pass
+    return coords_from_customer_link(link)
+
+
 def merchant_badge(merchant):
     """شارة تسويقية من بيانات المتجر إن وُجدت، وإلا شارة آمنة افتراضية."""
     for key in ("badge", "label", "tag"):
@@ -599,11 +644,8 @@ def login_session(row):
 
 def customer_payload(phone):
     xy = None
-    if GEO_OK and st.session_state.customer_map_link:
-        try:
-            xy = coords_from_map_link(st.session_state.customer_map_link)
-        except Exception:
-            xy = None
+    if st.session_state.customer_map_link:
+        xy = customer_map_coords(st.session_state.customer_map_link)
     p = {
         "name": st.session_state.customer_name, "phone": phone,
         "address": st.session_state.customer_address, "delivery_notes": st.session_state.delivery_notes,
@@ -701,12 +743,9 @@ if not st.session_state.logged_in:
 # التوصيل + إرسال الطلب
 # ============================================================
 def customer_xy():
-    if not GEO_OK or not st.session_state.customer_map_link:
+    if not st.session_state.customer_map_link:
         return None
-    try:
-        return coords_from_map_link(st.session_state.customer_map_link)
-    except Exception:
-        return None
+    return customer_map_coords(st.session_state.customer_map_link)
 
 
 def cart_subtotal(cart):
@@ -1297,11 +1336,10 @@ elif st.session_state.nav_tab == "الحساب":
 
     if st.session_state.customer_map_link:
         st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 معاينة موقعك المسجل على خرائط جوجل</a></div>', unsafe_allow_html=True)
-        if GEO_OK:
-            if customer_xy():
-                st.caption("✅ تم التعرّف على إحداثيات موقعك، وسيظهر للسائق على الخريطة.")
-            else:
-                st.caption("⚠️ لم نستطع قراءة إحداثيات هذا الرابط. جرّب رابط المشاركة (Share) من تطبيق خرائط جوجل.")
+        if customer_xy():
+            st.caption("✅ تم التعرّف على إحداثيات موقعك، وسيظهر للسائق على الخريطة.")
+        else:
+            st.caption("⚠️ لم نستطع قراءة الإحداثيات من هذا الرابط. استخدم مشاركة الموقع من خرائط Google أو رابطًا يحتوي على دبوس الموقع.")
 
     map_cols = st.columns(2)
     with map_cols[0]:
