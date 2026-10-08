@@ -28,6 +28,35 @@ def push_ready():
 
 PUSH_ON = PUSH_IMPORT_OK and push_ready()
 
+try:
+    from fees import DEFAULT_PER_KM
+except Exception:
+    DEFAULT_PER_KM = 0.25
+
+try:
+    from auth_pin import set_pin, valid_pin
+    PIN_OK = True
+except Exception:
+    PIN_OK = False
+
+
+def render_pin_reset(table, row_id, label, key):
+    """تعيين / إعادة تعيين رمز PIN (4 أرقام) لتاجر أو سائق."""
+    if not PIN_OK:
+        st.caption("ارفع auth_pin.py لتفعيل تعيين PIN.")
+        return
+    with st.expander(f"🔑 تعيين / إعادة تعيين PIN لـ {label}"):
+        npin = st.text_input("PIN جديد (4 أرقام)", max_chars=4, key=f"pin_{key}")
+        if st.button("حفظ PIN", key=f"pinbtn_{key}"):
+            if not valid_pin(npin):
+                st.error("يجب أن يكون PIN من 4 أرقام.")
+            else:
+                try:
+                    set_pin(sb, table, row_id, "", npin)
+                    st.success("تم حفظ PIN. سلّمه لصاحب الحساب.")
+                except Exception as e:
+                    st.error(f"تعذر الحفظ (هل شغّلت supabase_update_2.sql؟): {e}")
+
 # ---- (جديد) استيراد الأصناف بالجملة ----
 try:
     from catalog_tools import render_bulk_import
@@ -51,7 +80,7 @@ def storage_client():
 # إعداد الصفحة (لوحة الإدارة المستقلة)
 # ============================================================
 st.set_page_config(
-    page_title="لوحة إدارة Halago - Admin Panel",
+    page_title="لوحة إدارة بوابة الكرك - Admin Panel",
     page_icon="⚙",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -158,7 +187,7 @@ if PUSH_ON:
 st.markdown(
     """
     <div class="admin-header">
-        <div class="admin-header-title">⚙ لوحة إدارة Halago الشاملة (المستقلة)</div>
+        <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
         <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
     </div>
     """,
@@ -273,7 +302,7 @@ def handle_image_input(uploaded_file, url_input):
 # ============================================================
 NO_DRIVER = "— بدون سائق —"
 STATUS_OPTIONS = ["قيد التجهيز", "جاهز للاستلام", "جاري التوصيل", "تم التوصيل", "ملغي"]
-PUSH_TITLE = "Halago - الإدارة"
+PUSH_TITLE = "بوابة الكرك - الإدارة"
 
 
 def flash(kind, msg):
@@ -374,12 +403,17 @@ with tab_orders:
                 details = ord_item.get("order_details")
                 payment = ord_item.get("payment_method")
                 cur_driver = ord_item.get("driver_name") or ""
+                cash_badge = ""
+                if ord_item.get("cash_collected"):
+                    cash_badge = "<br><span style='color:#15803D;'>💵 استلم الكابتن المبلغ نقداً وسلّمه للإدارة ✅</span>"
+                if status == "تم التوصيل":
+                    cash_badge += "<br><span style='color:#15803D;'>🏁 تم توصيل الطلب للزبون ✅</span>"
 
                 st.markdown(f"""
                 <div style="background:white; border-radius:12px; padding:15px; margin-bottom:12px; border:1px solid #D1D5DB; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                     <b>الطلب #{oid} — الزبون: {c_name} ({c_phone})</b><br>
                     <span>📍 العنوان: {c_address}</span><br>
-                    <span>💰 الإجمالي: <b>{total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>
+                    <span>💰 الإجمالي: <b>{total} د.أ</b> | الدفع: {payment} | الحالة: <b>{status}</b></span>{cash_badge}
                     <pre style="background:#F8F9FA; padding:8px; border-radius:6px; margin-top:8px;">{details}</pre>
                 </div>
                 """, unsafe_allow_html=True)
@@ -430,7 +464,7 @@ with tab_orders:
                 store_names = stores_of(ord_item)
 
                 # 1) رسالة للزبون بحالة طلبه
-                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من Halago، حالته الآن: {new_status}."
+                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
                 url_cust = wa_link(c_phone_str, wa_msg_cust)
 
                 # 2) رسالة للسائق المعيّن: بيانات التوصيل كاملة
@@ -440,7 +474,7 @@ with tab_orders:
                     mi = merchants_by_name.get(sn) or {}
                     store_lines.append(f"- {sn} | هاتف: {mi.get('phone') or '-'} | الموقع: {mi.get('map_link') or mi.get('location') or '-'}")
                 drv_msg = (
-                    f"🛵 توصيل طلب رقم #{oid} (Halago)\n"
+                    f"🛵 توصيل طلب رقم #{oid} (بوابة الكرك)\n"
                     f"الزبون: {c_name}\n"
                     f"هاتف الزبون: {c_phone_str}\n"
                     f"العنوان: {c_address}\n"
@@ -482,7 +516,7 @@ with tab_orders:
                     for si, sn in enumerate(store_names):
                         mi = merchants_by_name.get(sn) or {}
                         items = [re.sub(r"\s*\[المتجر:[^\]]*\]", "", ln).strip() for ln in order_lines if f"[المتجر: {sn}]" in ln]
-                        store_msg = f"طلب جديد رقم #{oid} من Halago\nالمتجر: {sn}\nالأصناف:\n" + "\n".join(items)
+                        store_msg = f"طلب جديد رقم #{oid} من بوابة الكرك\nالمتجر: {sn}\nالأصناف:\n" + "\n".join(items)
                         url_store = wa_link(mi.get("phone"), store_msg)
                         with s_cols[si]:
                             if url_store:
@@ -540,7 +574,8 @@ with tab_merchants:
                         with fee_c1:
                             e_fee = st.number_input("الأجرة الأساسية (د.أ):", min_value=0.0, step=0.25, value=float(cur_m.get("delivery_fee") if cur_m.get("delivery_fee") is not None else 1.50))
                         with fee_c2:
-                            e_fee_km = st.number_input("أجرة إضافية لكل كم (0 = أجرة ثابتة):", min_value=0.0, step=0.05, value=float(cur_m.get("fee_per_km") or 0.0))
+                            e_use_def_km = st.checkbox(f"استخدم سعر الكيلومتر الافتراضي ({DEFAULT_PER_KM:.2f} د.أ)", value=cur_m.get("fee_per_km") is None)
+                            e_fee_km = st.number_input("أو سعر كيلومتر خاص بهذا المتجر (0 = أجرة ثابتة بدون مسافة):", min_value=0.0, step=0.05, value=float(cur_m.get("fee_per_km") or 0.0))
                         ll_c1, ll_c2 = st.columns(2)
                         with ll_c1:
                             e_lat = st.text_input("خط العرض Lat (اختياري):", value="" if cur_m.get("lat") is None else str(cur_m.get("lat")))
@@ -579,7 +614,7 @@ with tab_merchants:
                             }
                             fee_payload = {
                                 "delivery_fee": e_fee,
-                                "fee_per_km": e_fee_km,
+                                "fee_per_km": None if e_use_def_km else e_fee_km,
                                 "lat": to_float_or_none(e_lat),
                                 "lng": to_float_or_none(e_lng)
                             }
@@ -591,6 +626,8 @@ with tab_merchants:
                             sb.table("merchants").delete().eq("id", cur_m["id"]).execute()
                             st.warning("تم حذف المتجر نهائياً.")
                             st.rerun()
+
+                    render_pin_reset("merchants", cur_m["id"], f"متجر {cur_m.get('name','')}", f"m{cur_m['id']}")
             else:
                 st.info("لا توجد متاجر مسجلة.")
         except Exception as e:
@@ -610,7 +647,8 @@ with tab_merchants:
             with nf_c1:
                 n_fee = st.number_input("الأجرة الأساسية (د.أ):", min_value=0.0, step=0.25, value=1.50, key="new_store_fee")
             with nf_c2:
-                n_fee_km = st.number_input("أجرة إضافية لكل كم (0 = أجرة ثابتة):", min_value=0.0, step=0.05, value=0.0, key="new_store_fee_km")
+                n_use_def_km = st.checkbox(f"استخدم سعر الكيلومتر الافتراضي ({DEFAULT_PER_KM:.2f} د.أ)", value=True, key="new_store_def_km")
+                n_fee_km = st.number_input("أو سعر كيلومتر خاص (0 = أجرة ثابتة بدون مسافة):", min_value=0.0, step=0.05, value=0.0, key="new_store_fee_km")
             nl_c1, nl_c2 = st.columns(2)
             with nl_c1:
                 n_lat = st.text_input("خط العرض Lat (اختياري):", "", key="new_store_lat")
@@ -645,7 +683,7 @@ with tab_merchants:
                     }
                     fee_payload = {
                         "delivery_fee": n_fee,
-                        "fee_per_km": n_fee_km,
+                        "fee_per_km": None if n_use_def_km else n_fee_km,
                         "lat": to_float_or_none(n_lat),
                         "lng": to_float_or_none(n_lng)
                     }
@@ -800,7 +838,7 @@ with tab_drivers:
                         ud_name = st.text_input("اسم السائق:", value=cur_d.get("name", ""))
                         ud_phone = st.text_input("رقم الهاتف:", value=cur_d.get("phone", ""))
                         ud_map = st.text_input("رابط موقع السائق (Google Maps URL):", value=d_map_link)
-                        _d_status_opts = ["متاح", "في توصيل طلب", "غير متصل"]
+                        _d_status_opts = ["متاح", "في توصيل طلب", "غير متصل", "قيد المراجعة"]
                         _cur_d_status = cur_d.get("status") if cur_d.get("status") in _d_status_opts else "متاح"
                         ud_status = st.selectbox("الحالة:", _d_status_opts, index=_d_status_opts.index(_cur_d_status))
 
@@ -828,6 +866,8 @@ with tab_drivers:
                             sb.table("drivers").delete().eq("id", cur_d["id"]).execute()
                             st.warning("تم حذف السائق بنجاح.")
                             st.rerun()
+
+                    render_pin_reset("drivers", cur_d["id"], f"السائق {cur_d.get('name','')}", f"d{cur_d['id']}")
             else:
                 st.info("لا يوجد سائقون مسجلون بعد.")
         except Exception:
