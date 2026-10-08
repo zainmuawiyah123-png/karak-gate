@@ -80,7 +80,7 @@ def storage_client():
 # إعداد الصفحة (لوحة الإدارة المستقلة)
 # ============================================================
 st.set_page_config(
-    page_title="لوحة إدارة بوابة الكرك - Admin Panel",
+    page_title="لوحة إدارة Halago - Admin Panel",
     page_icon="⚙",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -187,8 +187,8 @@ if PUSH_ON:
 st.markdown(
     """
     <div class="admin-header">
-        <div class="admin-header-title">⚙ لوحة إدارة بوابة الكرك الشاملة (المستقلة)</div>
-        <div class="admin-header-sub">Karak Gate Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
+        <div class="admin-header-title">⚙ لوحة إدارة Halago الشاملة (المستقلة)</div>
+        <div class="admin-header-sub">Halago Administration • إدارة المتاجر، الأصناف، السائقين، الطلبات، والتقارير</div>
     </div>
     """,
     unsafe_allow_html=True
@@ -210,10 +210,11 @@ tabs = st.tabs([
     "🛵 إدارة السائقين", 
     "👥 سجل الزبائن", 
     "🏷 إدارة العروض", 
-    "📊 التقرير المالي"
+    "📊 التقرير المالي",
+    "🎞 الإعلانات"
 ])
 
-tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance = tabs
+tab_orders, tab_merchants, tab_products, tab_drivers, tab_customers, tab_offers, tab_finance, tab_ads = tabs
 
 
 # ============================================================
@@ -302,7 +303,7 @@ def handle_image_input(uploaded_file, url_input):
 # ============================================================
 NO_DRIVER = "— بدون سائق —"
 STATUS_OPTIONS = ["قيد التجهيز", "جاهز للاستلام", "جاري التوصيل", "تم التوصيل", "ملغي"]
-PUSH_TITLE = "بوابة الكرك - الإدارة"
+PUSH_TITLE = "Halago - الإدارة"
 
 
 def flash(kind, msg):
@@ -464,7 +465,7 @@ with tab_orders:
                 store_names = stores_of(ord_item)
 
                 # 1) رسالة للزبون بحالة طلبه
-                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من بوابة الكرك، حالته الآن: {new_status}."
+                wa_msg_cust = f"مرحباً {c_name}، بخصوص طلبك رقم #{oid} من Halago، حالته الآن: {new_status}."
                 url_cust = wa_link(c_phone_str, wa_msg_cust)
 
                 # 2) رسالة للسائق المعيّن: بيانات التوصيل كاملة
@@ -474,7 +475,7 @@ with tab_orders:
                     mi = merchants_by_name.get(sn) or {}
                     store_lines.append(f"- {sn} | هاتف: {mi.get('phone') or '-'} | الموقع: {mi.get('map_link') or mi.get('location') or '-'}")
                 drv_msg = (
-                    f"🛵 توصيل طلب رقم #{oid} (بوابة الكرك)\n"
+                    f"🛵 توصيل طلب رقم #{oid} (Halago)\n"
                     f"الزبون: {c_name}\n"
                     f"هاتف الزبون: {c_phone_str}\n"
                     f"العنوان: {c_address}\n"
@@ -516,7 +517,7 @@ with tab_orders:
                     for si, sn in enumerate(store_names):
                         mi = merchants_by_name.get(sn) or {}
                         items = [re.sub(r"\s*\[المتجر:[^\]]*\]", "", ln).strip() for ln in order_lines if f"[المتجر: {sn}]" in ln]
-                        store_msg = f"طلب جديد رقم #{oid} من بوابة الكرك\nالمتجر: {sn}\nالأصناف:\n" + "\n".join(items)
+                        store_msg = f"طلب جديد رقم #{oid} من Halago\nالمتجر: {sn}\nالأصناف:\n" + "\n".join(items)
                         url_store = wa_link(mi.get("phone"), store_msg)
                         with s_cols[si]:
                             if url_store:
@@ -970,3 +971,46 @@ with tab_finance:
             st.info("لا توجد بيانات مالية كافية بعد.")
     except Exception as e:
         st.error(f"تعذر استخراج التقرير المالي: {e}")
+
+
+# ============================================================
+# 8. الإعلانات المتحركة في تطبيق الزبون
+# ============================================================
+with tab_ads:
+    st.subheader("🎞 إدارة الإعلانات المتحركة (تظهر في أعلى الصفحة الرئيسية للزبون)")
+    st.caption("إن لم تضف أي إعلان تظهر الإعلانات الافتراضية. لا تكتب عروضًا (خصومات) غير مفعّلة فعلًا في النظام.")
+    try:
+        with st.form("add_ad_form", clear_on_submit=True):
+            a1, a2 = st.columns(2)
+            with a1:
+                ad_tag = st.text_input("الوسم القصير (مثال: عرض الترحيب)")
+                ad_title = st.text_input("العنوان الرئيسي (مثال: توصيل مجاني فوق 15 دينار)")
+            with a2:
+                ad_sub = st.text_input("السطر الفرعي")
+                ad_color = st.selectbox("اللون", ["purple", "orange", "green", "blue"])
+            ad_sort = st.number_input("الترتيب (الأصغر أولًا)", min_value=0, value=0, step=1)
+            if st.form_submit_button("➕ إضافة الإعلان"):
+                if not ad_title.strip():
+                    st.error("العنوان الرئيسي مطلوب.")
+                else:
+                    sb.table("ads").insert({"tag": ad_tag.strip(), "title": ad_title.strip(), "subtitle": ad_sub.strip(),
+                                            "color": ad_color, "active": True, "sort": int(ad_sort)}).execute()
+                    st.success("تمت إضافة الإعلان (يظهر للزبائن خلال دقيقة).")
+                    st.rerun()
+        ads_rows = sb.table("ads").select("*").order("sort").execute().data or []
+        for ad in ads_rows:
+            c1, c2, c3, c4 = st.columns([4, 1.2, 1.2, 1.2])
+            with c1:
+                st.markdown(f"**{ad.get('title')}** — {ad.get('subtitle') or ''}  \n`{ad.get('tag') or ''}` • {ad.get('color')} • {'مفعّل' if ad.get('active') else 'متوقف'}")
+            with c2:
+                if st.button("إيقاف" if ad.get("active") else "تفعيل", key=f"ad_toggle_{ad['id']}"):
+                    sb.table("ads").update({"active": not ad.get("active")}).eq("id", ad["id"]).execute()
+                    st.rerun()
+            with c4:
+                if st.button("🗑 حذف", key=f"ad_del_{ad['id']}"):
+                    sb.table("ads").delete().eq("id", ad["id"]).execute()
+                    st.rerun()
+        if not ads_rows:
+            st.info("لا توجد إعلانات مخصصة بعد (تظهر الإعلانات الافتراضية).")
+    except Exception as e:
+        st.info(f"شغّل supabase_update_3.sql لتفعيل الإعلانات ({e})")
