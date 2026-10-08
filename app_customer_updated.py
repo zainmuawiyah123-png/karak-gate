@@ -118,6 +118,12 @@ SERVICE_FEE = 0.25
 WA_NUMBER = "962797088219"
 PAGE_SIZE = 40
 
+# كوبونات محلية قابلة للتعديل، ولا تحتاج إلى جدول جديد في Supabase.
+COUPONS = {
+    "HALAGO10": {"type": "percent", "value": 10, "label": "خصم 10%"},
+    "WELCOME": {"type": "fixed", "value": 1.0, "label": "خصم 1.00 د.أ"},
+}
+
 # ============================================================
 # UTF-8 (محمي)
 # ============================================================
@@ -469,7 +475,7 @@ for _k, _v in {
     "logged_in": False, "customer_id": None,
     "phone": "", "customer_name": "", "customer_email": "",
     "customer_address": "", "delivery_notes": "", "customer_map_link": "",
-    "cart": [], "nav_tab": "الرئيسية", "search_query": "", "search_input_key": 0,
+    "cart": [], "coupon_code": "", "nav_tab": "الرئيسية", "search_query": "", "search_input_key": 0,
     "selected_merchant": None, "store_q": "", "store_page": 0, "last_order": None,
 }.items():
     if _k not in st.session_state:
@@ -551,6 +557,38 @@ def merchant_eta(merchant):
         if value:
             return value
     return "25–40 دقيقة"
+
+
+def coupon_discount(code, subtotal):
+    """حساب الخصم محليًا، دون حفظ الكوبون أو تعديل أي بيانات في Supabase."""
+    normalized = str(code or "").strip().upper()
+    coupon = COUPONS.get(normalized)
+    if not coupon or subtotal <= 0:
+        return 0.0, None
+    if coupon["type"] == "percent":
+        discount = subtotal * float(coupon["value"]) / 100
+    else:
+        discount = float(coupon["value"])
+    return round(min(discount, subtotal), 2), coupon
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_popular_merchants():
+    """قراءة فقط: يحسب شعبية المتاجر من تفاصيل الطلبات الموجودة."""
+    try:
+        rows = sb.table("orders").select("order_details").limit(5000).execute().data or []
+        counts = {}
+        for row in rows:
+            details = str(row.get("order_details") or "")
+            for merchant in re.findall(r"\[المتجر:\s*(.*?)\]", details):
+                name = merchant.strip()
+                if name:
+                    counts[name] = counts.get(name, 0) + 1
+        merchants = {str(m.get("name")): m for m in load_merchants()}
+        ranked = sorted(counts.items(), key=lambda pair: pair[1], reverse=True)
+        return [(merchants[name], count) for name, count in ranked if name in merchants][:6]
+    except Exception:
+        return []
 
 
 # ============================================================
@@ -784,13 +822,15 @@ def wa_order_message(oid, cart, delivery, total, payment):
     return "\n".join(lines)
 
 
-def place_order(cart, payment, delivery, xy, via_whatsapp=False):
+def place_order(cart, payment, delivery, xy, via_whatsapp=False, discount=0.0, coupon_code=""):
     subtotal = cart_subtotal(cart)
-    total = subtotal + delivery + SERVICE_FEE
+    total = max(0.0, subtotal + delivery + SERVICE_FEE - float(discount or 0))
     summary = "\n".join(
         f"- {i['name']} ×{i.get('qty', 1)} ({safe_price(i['price']) * int(i.get('qty', 1)):.2f} د.أ) [المتجر: {i['merchant']}]"
         for i in cart)
     summary += f"\nالتوصيل: {delivery:.2f} د.أ"
+    if discount > 0 and coupon_code:
+        summary += f"\nكوبون الخصم: {coupon_code} (-{discount:.2f} د.أ)"
     addr = st.session_state.customer_address
     if st.session_state.delivery_notes:
         addr += f" (ملاحظات: {st.session_state.delivery_notes})"
@@ -886,7 +926,30 @@ def render_cart(prefix):
 
         xy = customer_xy()
         delivery, uses_km = compute_delivery(st.session_state.cart, xy)
-        total = subtotal + delivery + SERVICE_FEE
+        coupon_input = st.text_input(
+            "🎟️ لديك كوبون خصم؟",
+            value=st.session_state.get("coupon_code", ""),
+            key=f"coupon_input_{prefix}",
+            placeholder="اكتب الكود مثل HALAGO10",
+        )
+        coupon_cols = st.columns([1, 1.5])
+        with coupon_cols[0]:
+            apply_coupon = st.button("تطبيق الكوبون", key=f"apply_coupon_{prefix}", use_container_width=True)
+        with coupon_cols[1]:
+            if st.session_state.get("coupon_code"):
+                st.caption(f"الكوبون الحالي: `{st.session_state.coupon_code}`")
+        if apply_coupon:
+            discount_check, coupon_check = coupon_discount(coupon_input, subtotal)
+            if coupon_check:
+                st.session_state.coupon_code = coupon_input.strip().upper()
+                st.success(f"تم تطبيق {coupon_check['label']} على قيمة الأصناف.")
+                st.rerun()
+            else:
+                st.session_state.coupon_code = ""
+                st.error("كود الكوبون غير صحيح أو لا ينطبق على السلة.")
+
+        discount, active_coupon = coupon_discount(st.session_state.get("coupon_code", ""), subtotal)
+        total = max(0.0, subtotal + delivery + SERVICE_FEE - discount)
 
         st.markdown("---")
         st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
@@ -913,12 +976,15 @@ def render_cart(prefix):
             st.caption("تُحسب الأجرة الأساسية فقط لأن موقعك على الخريطة غير محدد.")
 
         st.write(f"⚙️ **الخدمة:** {SERVICE_FEE:.2f} د.أ")
+        if discount > 0:
+            st.write(f"🎟️ **الخصم ({st.session_state.coupon_code}):** -{discount:.2f} د.أ")
         st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
         if not xy:
             st.warning("رابط موقعك على خرائط جوجل غير محدد أو غير صالح (من صفحة حسابي)، لن يرى السائق موقعك على الخريطة.")
 
         if st.button("🗑 تفريغ السلة", key=f"clear_cart_{prefix}", use_container_width=True):
             st.session_state.cart = []
+            st.session_state.coupon_code = ""
             st.rerun()
 
         payment = st.radio(
@@ -935,9 +1001,13 @@ def render_cart(prefix):
                                        (True, "💬 تأكيد وإرسال للنظام + واتساب", "submit_wa")):
                 if st.button(label, key=f"{key}_{prefix}_mode", use_container_width=True):
                     try:
-                        oid, wa = place_order(st.session_state.cart, payment, delivery, xy, via_wa)
+                        oid, wa = place_order(
+                            st.session_state.cart, payment, delivery, xy, via_wa,
+                            discount=discount, coupon_code=st.session_state.get("coupon_code", ""),
+                        )
                         st.session_state.last_order = {"id": oid, "wa": wa}
                         st.session_state.cart = []
+                        st.session_state.coupon_code = ""
                         st.rerun()
                     except Exception as e:
                         st.error(f"خطأ أثناء إرسال الطلب: {e}")
@@ -1117,6 +1187,23 @@ if st.session_state.nav_tab == "الرئيسية":
 
         if user_input != st.session_state.search_query:
             st.session_state.search_query = user_input
+
+        popular = load_popular_merchants()
+        if popular:
+            st.markdown("<div class='kg-section-title'>🔥 الأكثر طلبًا</div>", unsafe_allow_html=True)
+            popular_cols = st.columns(min(3, len(popular)))
+            for pi, (popular_store, order_count) in enumerate(popular):
+                with popular_cols[pi % len(popular_cols)]:
+                    popular_name = str(popular_store.get("name") or "متجر")
+                    st.markdown("<div class='kg-store-card' style='padding:10px; margin-bottom:8px;'>", unsafe_allow_html=True)
+                    display_image(popular_store.get("image_data"), width=62, fallback="🏬")
+                    st.markdown(f"<div style='font-size:14px; font-weight:900;'>{html.escape(popular_name)}</div>", unsafe_allow_html=True)
+                    st.caption(f"🔥 ضمن اختيارات الزبائن ({order_count} طلب)")
+                    if st.button("تصفح المتجر", key=f"popular_store_{pi}", use_container_width=True):
+                        st.session_state.selected_merchant = popular_name
+                        st.session_state.store_q = ""
+                        st.session_state.store_page = 0
+                        st.rerun()
 
         st.markdown("<div class='kg-section-title'>استكشف الأقسام</div>", unsafe_allow_html=True)
 
