@@ -43,7 +43,7 @@ COMMISSION = 0.10
 PAGE = 15
 CATEGORIES = ["مطاعم", "حلويات", "ماركت", "محامص ومكسرات", "خضروات وفواكه", "لحوم", "صيدليات ومستلزمات طبيه"]
 
-st.set_page_config(page_title="بوابة المتاجر - Karak Gate", page_icon="🔔", layout="wide")
+st.set_page_config(page_title="بوابة المتاجر - Halago", page_icon="🔔", layout="wide")
 
 st.markdown(
     """
@@ -154,7 +154,7 @@ def autorefresh(seconds=15):
         pass
 
 
-st.title("🏬 بوابة المتاجر الشاملة - Karak Gate")
+st.title("🏬 بوابة المتاجر الشاملة - Halago")
 
 if "merchant_step" not in st.session_state:
     st.session_state.merchant_step = "login_or_register"
@@ -163,7 +163,7 @@ if "merchant_step" not in st.session_state:
 # الدخول / التسجيل (هاتف + PIN)
 # ============================================================
 if st.session_state.merchant_step == "login_or_register":
-    st.subheader("👋 أهلاً بك في بوابة تجار الكرك")
+    st.subheader("👋 أهلاً بك في تجار Halago")
     choice = st.radio("اختر العملية:", ["تسجيل دخول المتجر", "تسجيل متجر جديد لأول مرة"], horizontal=True)
 
     if choice == "تسجيل دخول المتجر":
@@ -463,8 +463,8 @@ elif st.session_state.merchant_step == "dashboard":
                             if o_dname:
                                 d = sb.table("drivers").select("id").eq("name", o_dname).limit(1).execute().data or []
                                 if d:
-                                    send_push("driver", d[0]["id"], "بوابة الكرك", f"الطلب #{o_id} جاهز للاستلام من {m_name}")
-                            send_push("admin", 0, "بوابة الكرك", f"الطلب #{o_id} جاهز للاستلام من {m_name}")
+                                    send_push("driver", d[0]["id"], "Halago", f"الطلب #{o_id} جاهز للاستلام من {m_name}")
+                            send_push("admin", 0, "Halago", f"الطلب #{o_id} جاهز للاستلام من {m_name}")
                         except Exception:
                             pass
                     st.success("تم تحديث حالة الطلب بأنه جاهز للاستلام!")
