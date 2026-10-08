@@ -37,6 +37,17 @@ def route_info(lat1, lon1, lat2, lon2):
 import re
 
 
+def _iframe(src, height=300):
+    """st.iframe في الإصدارات الجديدة، وإلا components.v1.iframe (القديم المُهمَل)."""
+    if hasattr(st, "iframe"):
+        try:
+            st.iframe(src, height=height)
+            return
+        except Exception:
+            pass
+    st.components.v1.iframe(src, height=height)
+
+
 def _coords(row, pairs):
     for a, b in pairs:
         try:
@@ -107,9 +118,10 @@ def fee_for(order, merchant):
     return (None if fee is None else round(float(fee), 2)), info
 
 
-def render_driver_order(order, merchant, nav="route"):
+def render_driver_order(order, merchant, nav="route", show_map=True):
     """خريطة ومسافة وأجرة للطلب.
     nav: "route" (من موقعي ← المتجر ← الزبون) | "store" (للمتجر فقط) | "customer" (للزبون فقط) | None
+    show_map=False: يعرض المسافة والأجرة فقط بدون خريطة (للطلبات غير المسندة، لحماية موقع الزبون)
     """
     fee, info = fee_for(order, merchant)
     if info is None:
@@ -126,6 +138,14 @@ def render_driver_order(order, merchant, nav="route"):
     if info["estimated"]:
         st.caption("المسافة تقديرية (تعذّر حساب مسار الطريق الآن).")
 
+    if not show_map:
+        return fee
+
+    # خريطة جوجل المضمّنة: مسار من المتجر إلى الزبون (بدون مفتاح API)
+    gsrc = f"https://maps.google.com/maps?saddr={m_lat},{m_lon}&daddr={c_lat},{c_lon}&output=embed"
+    st.caption("🔴 المتجر ← 🔵 الزبون (المسار على خرائط جوجل)")
+    _iframe(gsrc, height=320)
+
     pts = [
         {"name": f"المتجر: {merchant['name']}", "lon": m_lon, "lat": m_lat, "color": [232, 64, 47]},
         {"name": "موقع الزبون", "lon": c_lon, "lat": c_lat, "color": [30, 120, 220]},
@@ -138,8 +158,9 @@ def render_driver_order(order, merchant, nav="route"):
     ]
     view = pdk.ViewState(latitude=(m_lat + c_lat) / 2, longitude=(m_lon + c_lon) / 2,
                          zoom=12.5 if info["km"] < 5 else 11)
-    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view,
-                             tooltip={"text": "{name}"}), use_container_width=True)
+    with st.expander("🗺 خريطة بديلة (إن لم تظهر خريطة جوجل)"):
+        st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view,
+                                 tooltip={"text": "{name}"}), use_container_width=True)
 
     base = "https://www.google.com/maps/dir/?api=1&travelmode=driving"
     if nav == "route":
