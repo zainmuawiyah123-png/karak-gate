@@ -1,12 +1,15 @@
 import sys
 import io
+import re
+import time
 import base64
+import urllib.parse
 from datetime import datetime
 
 import streamlit as st
 from supabase import create_client
 
-# ---- (جديد) أدوات الخريطة والإشعارات: إن لم تُرفع ملفات الحزمة يعمل التطبيق بدونها ----
+# ---- أدوات الحزمة: إن لم تُرفع الملفات يعمل التطبيق بدونها (بدون خريطة/إشعارات) ----
 try:
     from driver_map import coords_from_map_link, merchant_coords, route_info
     GEO_OK = True
@@ -14,10 +17,17 @@ except Exception:
     GEO_OK = False
 
 try:
+    from fees import DEFAULT_PER_KM, DEFAULT_BASE_FEE
+except Exception:
+    DEFAULT_PER_KM, DEFAULT_BASE_FEE = 0.25, 1.50
+
+try:
     from push_service import send_push
     PUSH_IMPORT_OK = True
 except Exception:
     PUSH_IMPORT_OK = False
+
+from auth_pin import (valid_pin, valid_phone, norm_phone, set_pin, find_by_phone, check_pin, NO_PIN)
 
 
 def push_ready():
@@ -29,6 +39,10 @@ def push_ready():
 
 PUSH_ON = PUSH_IMPORT_OK and push_ready()
 
+MIN_ORDER = 5.0                 # الحد الأدنى للطلب (قيمة الأصناف فقط، بدون التوصيل والخدمة)
+SERVICE_FEE = 0.25
+WA_NUMBER = "962797088219"      # رقم واتساب لاستقبال الطلبات (+962797088219)
+PAGE_SIZE = 40
 
 # ============================================================
 # إعداد UTF-8
@@ -57,7 +71,7 @@ except Exception:
 # إعداد الصفحة
 # ============================================================
 st.set_page_config(
-    page_title="Halago - Karak Gate",
+    page_title="بوابة الكرك - Karak Gate",
     page_icon="🛒",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -139,10 +153,37 @@ div[data-testid="column"] .stButton > button {
     border: 1px solid #E2E8F0;
     box-shadow: 0 4px 20px rgba(0,0,0,0.04);
 }
+@keyframes kgfade { from {opacity:0; transform:scale(.92);} to {opacity:1; transform:scale(1);} }
+@keyframes kgspin { to { transform: rotate(360deg); } }
 </style>
 """,
     unsafe_allow_html=True
 )
+
+
+# ============================================================
+# شاشة الترحيب (3 ثوانٍ، مرة واحدة في كل جلسة)
+# ============================================================
+if not st.session_state.get("splash_done"):
+    _splash = st.empty()
+    _splash.markdown(
+        """
+        <div style="position:fixed; inset:0; z-index:999999; display:flex; flex-direction:column;
+                    align-items:center; justify-content:center; text-align:center;
+                    background:linear-gradient(135deg,#E64A19 0%,#FF7043 100%);">
+            <div style="font-size:84px; animation:kgfade .8s ease both;">🛒</div>
+            <div style="font-size:40px; font-weight:900; color:#FFFFFF !important; animation:kgfade 1s ease both;">بوابة الكرك</div>
+            <div style="font-size:16px; color:#FFFFFF !important; opacity:.9; margin-top:6px;">Karak Gate</div>
+            <div style="font-size:15px; color:#FFFFFF !important; opacity:.95; margin-top:14px;">اطلب ما تريد من متاجر الكرك بكل سهولة</div>
+            <div style="margin-top:28px; width:34px; height:34px; border:4px solid rgba(255,255,255,.35);
+                        border-top-color:#FFFFFF; border-radius:50%; animation:kgspin 1s linear infinite;"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    time.sleep(3)
+    _splash.empty()
+    st.session_state["splash_done"] = True
 
 
 # ============================================================
@@ -159,23 +200,18 @@ sb = db()
 
 
 # ============================================================
-# تحميل البيانات (جديد: بدون تحميل كل الأصناف، مع كاش قصير)
+# تحميل البيانات (بدون تحميل كل الأصناف، مع كاش قصير)
 # ============================================================
-PAGE_SIZE = 40
-
-
 @st.cache_data(ttl=30, show_spinner=False)
 def load_merchants():
     try:
-        data = sb.table("merchants").select("*").eq("status", "معتمد").execute().data or []
-        return data
+        return sb.table("merchants").select("*").eq("status", "معتمد").execute().data or []
     except Exception:
         return []
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def merchants_with_product(q):
-    """أسماء المتاجر التي فيها صنف يطابق البحث (بدون جلب كل الأصناف)."""
     try:
         rows = sb.table("products").select("merchant_name").ilike("item_name", f"%{q}%").limit(1000).execute().data or []
         return {r.get("merchant_name") for r in rows}
@@ -185,7 +221,6 @@ def merchants_with_product(q):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def load_products(merchant, q, page):
-    """صفحة واحدة من أصناف المتجر (مع بحث اختياري). يرجع (الأصناف، العدد الكلي)."""
     try:
         qr = (sb.table("products")
               .select("id,item_name,price,quantity,unit,image_path", count="exact")
@@ -198,9 +233,6 @@ def load_products(merchant, q, page):
         return [], 0
 
 
-# ============================================================
-# التحديث التلقائي (جديد: فقط في صفحة تتبع الطلبات)
-# ============================================================
 def maybe_autorefresh():
     try:
         from streamlit_autorefresh import st_autorefresh
@@ -210,46 +242,17 @@ def maybe_autorefresh():
 
 
 # ============================================================
-# Session State
+# Session State (بدون أي بيانات افتراضية لشخص معيّن)
 # ============================================================
-if "phone" not in st.session_state:
-    st.session_state.phone = "0790000000"
-
-if "customer_name" not in st.session_state:
-    st.session_state.customer_name = "أبو عدي"
-
-if "customer_email" not in st.session_state:
-    st.session_state.customer_email = "abu.adi@example.com"
-
-if "customer_address" not in st.session_state:
-    st.session_state.customer_address = "الكرك - المرج"
-
-if "delivery_notes" not in st.session_state:
-    st.session_state.delivery_notes = "يرجى الاتصال عند الوصول"
-
-if "customer_map_link" not in st.session_state:
-    st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-
-if "cart" not in st.session_state:
-    st.session_state.cart = []
-
-if "nav_tab" not in st.session_state:
-    st.session_state.nav_tab = "الرئيسية"
-
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
-
-if "search_input_key" not in st.session_state:
-    st.session_state.search_input_key = 0
-
-if "selected_merchant" not in st.session_state:
-    st.session_state.selected_merchant = None
-
-if "store_q" not in st.session_state:
-    st.session_state.store_q = ""
-
-if "store_page" not in st.session_state:
-    st.session_state.store_page = 0
+for _k, _v in {
+    "logged_in": False, "customer_id": None,
+    "phone": "", "customer_name": "", "customer_email": "",
+    "customer_address": "", "delivery_notes": "", "customer_map_link": "",
+    "cart": [], "nav_tab": "الرئيسية", "search_query": "", "search_input_key": 0,
+    "selected_merchant": None, "store_q": "", "store_page": 0, "last_order": None,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 query_params = st.query_params
 if "cat" in query_params:
@@ -302,11 +305,140 @@ def display_image(value, width=100, fallback="🛒"):
 
 
 # ============================================================
-# (جديد) التوصيل حسب إعدادات كل متجر + موقع الزبون + إرسال الطلب
+# الحساب: تسجيل / دخول بـ PIN من 4 أرقام
+# ============================================================
+def legacy_split(address):
+    """للسجلات القديمة التي خُزّن فيها العنوان والملاحظات والرابط في نص واحد."""
+    addr, notes, link = str(address or ""), "", ""
+    m = re.search(r"\|\s*رابط الخريطة:\s*(\S+)", addr)
+    if m:
+        link = m.group(1)
+    addr = re.sub(r"\|\s*البريد:.*?(?=\||$)", "", addr)
+    addr = re.sub(r"\|\s*رابط الخريطة:\s*\S+", "", addr)
+    m = re.search(r"\(ملاحظات:\s*(.*?)\)", addr)
+    if m:
+        notes = m.group(1)
+        addr = addr.replace(m.group(0), "")
+    return addr.strip(" |"), notes.strip(), link
+
+
+def login_session(row):
+    addr, notes, link = row.get("address") or "", row.get("delivery_notes") or "", row.get("map_link") or ""
+    if "رابط الخريطة:" in addr or "(ملاحظات:" in addr:
+        l_addr, l_notes, l_link = legacy_split(addr)
+        addr, notes, link = l_addr, notes or l_notes, link or l_link
+    st.session_state.update({
+        "logged_in": True, "customer_id": row.get("id"), "phone": row.get("phone") or "",
+        "customer_name": row.get("name") or "", "customer_address": addr,
+        "delivery_notes": notes, "customer_map_link": link, "customer_email": row.get("email") or "",
+    })
+
+
+def customer_payload(phone):
+    xy = None
+    if GEO_OK and st.session_state.customer_map_link:
+        try:
+            xy = coords_from_map_link(st.session_state.customer_map_link)
+        except Exception:
+            xy = None
+    p = {
+        "name": st.session_state.customer_name, "phone": phone,
+        "address": st.session_state.customer_address, "delivery_notes": st.session_state.delivery_notes,
+        "map_link": st.session_state.customer_map_link, "email": st.session_state.customer_email,
+    }
+    if xy:
+        p["lat"], p["lng"] = xy
+    return p
+
+
+def render_auth():
+    st.markdown(
+        """
+        <div class="kg-header">
+            <div class="kg-header-title">🛒 بوابة الكرك</div>
+            <div class="kg-header-sub">سجّل دخولك أو أنشئ حسابًا جديدًا لتبدأ الطلب</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    mode = st.radio("اختر:", ["تسجيل دخول", "حساب جديد"], horizontal=True, key="auth_mode")
+
+    if mode == "تسجيل دخول":
+        with st.form("login_form"):
+            phone = st.text_input("رقم الهاتف (مثال: 0797123456)")
+            pin = st.text_input("رمز PIN (4 أرقام)", type="password", max_chars=4)
+            go = st.form_submit_button("دخول", use_container_width=True)
+        if go:
+            if not valid_phone(phone) or not valid_pin(pin):
+                st.error("أدخل رقم هاتف أردني صحيح ورمز PIN من 4 أرقام.")
+            else:
+                row = find_by_phone(sb, "customers", phone)
+                if not row:
+                    st.error("لا يوجد حساب بهذا الرقم. اختر «حساب جديد».")
+                else:
+                    ok, msg = check_pin(sb, "customers", row, pin)
+                    if ok:
+                        login_session(row)
+                        st.rerun()
+                    elif msg == NO_PIN:
+                        st.warning("حسابك قديم بلا رمز PIN. اختر «حساب جديد» بنفس الرقم لتعيين رمز PIN وتحديث بياناتك.")
+                    else:
+                        st.error(msg)
+    else:
+        with st.form("register_form"):
+            name = st.text_input("الاسم الكامل")
+            phone = st.text_input("رقم الهاتف (مثال: 0797123456)")
+            c1, c2 = st.columns(2)
+            with c1:
+                pin = st.text_input("اختر رمز PIN (4 أرقام)", type="password", max_chars=4)
+            with c2:
+                pin2 = st.text_input("أعد كتابة PIN", type="password", max_chars=4)
+            address = st.text_area("عنوان التوصيل (المنطقة، الشارع، أقرب معلم)")
+            map_link = st.text_input("رابط موقعك على خرائط جوجل (اختياري لكن يسهّل وصول السائق)")
+            notes = st.text_input("ملاحظات لمندوب التوصيل (اختياري)")
+            go = st.form_submit_button("إنشاء الحساب", use_container_width=True)
+        if go:
+            if not name.strip() or not address.strip():
+                st.error("الاسم والعنوان مطلوبان.")
+            elif not valid_phone(phone):
+                st.error("رقم الهاتف غير صحيح (يجب أن يكون 07XXXXXXXX).")
+            elif not valid_pin(pin) or pin != pin2:
+                st.error("رمز PIN يجب أن يكون 4 أرقام ومتطابقًا في الخانتين.")
+            else:
+                existing = find_by_phone(sb, "customers", phone)
+                if existing and existing.get("pin_hash"):
+                    st.error("هذا الرقم مسجّل مسبقًا. استخدم «تسجيل دخول».")
+                else:
+                    try:
+                        st.session_state.customer_name = name.strip()
+                        st.session_state.customer_address = address.strip()
+                        st.session_state.customer_map_link = map_link.strip()
+                        st.session_state.delivery_notes = notes.strip()
+                        st.session_state.customer_email = ""
+                        np_ = norm_phone(phone)
+                        pl = customer_payload(np_)
+                        if existing:
+                            sb.table("customers").update(pl).eq("id", existing["id"]).execute()
+                            rid = existing["id"]
+                        else:
+                            rid = (sb.table("customers").insert(pl).execute().data or [{}])[0].get("id")
+                        set_pin(sb, "customers", rid, np_, pin)
+                        login_session(find_by_phone(sb, "customers", np_))
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"تعذر إنشاء الحساب: {e}")
+
+
+if not st.session_state.logged_in:
+    render_auth()
+    st.stop()
+
+
+# ============================================================
+# التوصيل + إرسال الطلب + واتساب
 # ============================================================
 def customer_xy():
-    """إحداثيات الزبون من رابط خرائط جوجل المحفوظ في حسابه (أو None)."""
-    if not GEO_OK:
+    if not GEO_OK or not st.session_state.customer_map_link:
         return None
     try:
         return coords_from_map_link(st.session_state.customer_map_link)
@@ -314,15 +446,21 @@ def customer_xy():
         return None
 
 
+def cart_subtotal(cart):
+    return sum(safe_price(i.get("price")) * int(i.get("qty", 1)) for i in cart)
+
+
 def compute_delivery(cart, xy):
-    """مجموع أجور التوصيل: لكل متجر في السلة: الأساسية + (أجرة الكم × المسافة). الأجرة الثابتة إن كان fee_per_km = 0."""
+    """لكل متجر في السلة: الأجرة الأساسية (1.5 افتراضيًا) + سعر الكم × المسافة.
+    سعر الكم: خاص بالمتجر إن حددته الإدارة، وإلا الافتراضي؛ والقيمة 0 تعني أجرة ثابتة."""
     by_name = {m.get("name"): m for m in load_merchants()}
     total, uses_km = 0.0, False
     for mname in dict.fromkeys(i["merchant"] for i in cart):
         m = by_name.get(mname) or {}
         base = m.get("delivery_fee")
-        fee = 1.50 if base is None else safe_price(base)
-        per_km = safe_price(m.get("fee_per_km"))
+        fee = DEFAULT_BASE_FEE if base is None else safe_price(base)
+        per_km = m.get("fee_per_km")
+        per_km = DEFAULT_PER_KM if per_km is None else safe_price(per_km)
         if per_km > 0 and xy and GEO_OK:
             mc = merchant_coords(m)
             if mc:
@@ -332,17 +470,38 @@ def compute_delivery(cart, xy):
     return round(total, 2), uses_km
 
 
-def place_order(cart, payment, delivery, service, xy):
-    subtotal = sum(safe_price(i.get("price")) for i in cart)
-    total = subtotal + delivery + service
-    summary = "\n".join(f"- {i['name']} ({i['price']:.2f} د.أ) [المتجر: {i['merchant']}]" for i in cart)
+def wa_order_message(oid, cart, delivery, total, payment):
+    lines = [f"طلب جديد رقم #{oid} - بوابة الكرك", ""]
+    for i in cart[:25]:
+        lines.append(f"• {i['name']} ×{i.get('qty', 1)} — {safe_price(i['price']) * int(i.get('qty', 1)):.2f} د.أ ({i['merchant']})")
+    if len(cart) > 25:
+        lines.append(f"… و{len(cart) - 25} أصناف أخرى (التفاصيل في النظام)")
+    lines += ["", f"التوصيل: {delivery:.2f} د.أ", f"الإجمالي: {total:.2f} د.أ", f"الدفع: {payment}", "",
+              f"الاسم: {st.session_state.customer_name}", f"الهاتف: {st.session_state.phone}",
+              f"العنوان: {st.session_state.customer_address}"]
+    if st.session_state.customer_map_link:
+        lines.append(f"الموقع: {st.session_state.customer_map_link}")
+    return "\n".join(lines)
+
+
+def place_order(cart, payment, delivery, xy, via_whatsapp=False):
+    subtotal = cart_subtotal(cart)
+    total = subtotal + delivery + SERVICE_FEE
+    summary = "\n".join(
+        f"- {i['name']} ×{i.get('qty', 1)} ({safe_price(i['price']) * int(i.get('qty', 1)):.2f} د.أ) [المتجر: {i['merchant']}]"
+        for i in cart)
     summary += f"\nالتوصيل: {delivery:.2f} د.أ"
+    addr = st.session_state.customer_address
+    if st.session_state.delivery_notes:
+        addr += f" (ملاحظات: {st.session_state.delivery_notes})"
+    if st.session_state.customer_map_link:
+        addr += f" | رابط الخريطة: {st.session_state.customer_map_link}"
     row = {
         "customer_name": st.session_state.customer_name,
         "customer_phone": st.session_state.phone,
-        "customer_address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | رابط الخريطة: {st.session_state.customer_map_link}",
+        "customer_address": addr,
         "order_details": summary,
-        "total_amount": total,
+        "total_amount": round(total, 2),
         "payment_method": payment,
         "order_status": "قيد التجهيز",
         "driver_name": "",
@@ -359,41 +518,76 @@ def place_order(cart, payment, delivery, service, xy):
         row.pop("lng")
         res = sb.table("orders").insert(row).execute()
     oid = (res.data or [{}])[0].get("id")
-    if PUSH_ON:      # إشعار مجاني للإدارة فقط (بدون أي بيانات للزبون)
+    if PUSH_ON:
         try:
-            send_push("admin", 0, "Halago", f"وصل طلب جديد رقم #{oid}")
+            send_push("admin", 0, "بوابة الكرك", f"وصل طلب جديد رقم #{oid}")
         except Exception:
             pass
-    return oid
+    wa = None
+    if via_whatsapp:
+        wa = f"https://wa.me/{WA_NUMBER}?text=" + urllib.parse.quote(wa_order_message(oid, cart, delivery, total, payment))
+    return oid, wa
+
+
+def add_to_cart(pid, name, price, merchant):
+    for i in st.session_state.cart:
+        if i.get("pid") == pid and i["merchant"] == merchant:
+            i["qty"] = int(i.get("qty", 1)) + 1
+            return
+    st.session_state.cart.append({"pid": pid, "name": name, "price": price, "merchant": merchant, "qty": 1})
 
 
 def render_cart(prefix):
     st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
     st.subheader("🛍 سلة الطلبات والفاتورة")
 
+    last = st.session_state.get("last_order")
+    if last:
+        st.success(f"🎉 تم تأكيد طلبك رقم #{last['id']} وإرساله للنظام!")
+        if last.get("wa"):
+            st.link_button("📲 اضغط هنا لإرسال الطلب على واتساب أيضًا", last["wa"], use_container_width=True)
+        if st.button("إغلاق", key=f"close_last_{prefix}"):
+            st.session_state.last_order = None
+            st.rerun()
+
     if not st.session_state.cart:
         st.info("السلة فارغة حالياً.")
     else:
-        subtotal = sum(safe_price(item.get("price")) for item in st.session_state.cart)
+        subtotal = cart_subtotal(st.session_state.cart)
 
-        for item in st.session_state.cart:
-            st.write(f"🔹 **{item['name']}**")
-            st.caption(f"{item['merchant']} | {item['price']:.2f} د.أ")
+        for ci, item in enumerate(st.session_state.cart):
+            q = int(item.get("qty", 1))
+            st.write(f"🔹 **{item['name']}** ×{q}")
+            c1, c2, c3 = st.columns([2, 1, 1])
+            with c1:
+                st.caption(f"{item['merchant']} | {safe_price(item['price']) * q:.2f} د.أ")
+            with c2:
+                if st.button("➕", key=f"inc_{prefix}_{ci}"):
+                    item["qty"] = q + 1
+                    st.rerun()
+            with c3:
+                if st.button("➖", key=f"dec_{prefix}_{ci}"):
+                    if q > 1:
+                        item["qty"] = q - 1
+                    else:
+                        st.session_state.cart.pop(ci)
+                    st.rerun()
 
         xy = customer_xy()
         delivery, uses_km = compute_delivery(st.session_state.cart, xy)
-        service = 0.25
-        total = subtotal + delivery + service
+        total = subtotal + delivery + SERVICE_FEE
 
         st.markdown("---")
         st.write(f"🏷 **مجموع الأصناف:** {subtotal:.2f} د.أ")
         st.write(f"🛵 **التوصيل:** {delivery:.2f} د.أ")
         if uses_km:
-            st.caption("أجرة التوصيل محسوبة حسب بُعد المتجر عن موقعك.")
-        st.write(f"⚙️ **الخدمة:** {service:.2f} د.أ")
+            st.caption("أجرة التوصيل = الأساسية + مبلغ حسب بُعد المتجر عن موقعك.")
+        elif not xy:
+            st.caption("تُحسب الأجرة الأساسية فقط لأن موقعك على الخريطة غير محدد.")
+        st.write(f"⚙️ **الخدمة:** {SERVICE_FEE:.2f} د.أ")
         st.markdown(f"### 💰 الإجمالي النهائي: {total:.2f} د.أ")
         if not xy:
-            st.warning("رابط موقعك على خرائط جوجل غير صالح أو غير محدد (من صفحة حسابي)، لن يرى السائق موقعك على الخريطة.")
+            st.warning("رابط موقعك على خرائط جوجل غير محدد أو غير صالح (من صفحة حسابي)، لن يرى السائق موقعك على الخريطة.")
 
         if st.button("🗑 تفريغ السلة", key=f"clear_cart_{prefix}", use_container_width=True):
             st.session_state.cart = []
@@ -406,14 +600,19 @@ def render_cart(prefix):
         )
 
         st.markdown("---")
-        if st.button("📌 تأكيد وإرسال للنظام", key=f"submit_{prefix}_mode", use_container_width=True):
-            try:
-                place_order(st.session_state.cart, payment, delivery, service, xy)
-                st.success("🎉 تم تأكيد طلبك بنجاح وإرساله للنظام!")
-                st.session_state.cart = []
-                st.rerun()
-            except Exception as e:
-                st.error(f"خطأ أثناء إرسال الطلب: {e}")
+        if subtotal < MIN_ORDER:
+            st.warning(f"الحد الأدنى للطلب {MIN_ORDER:.2f} د.أ (قيمة الأصناف فقط). أضف أصنافًا بقيمة {MIN_ORDER - subtotal:.2f} د.أ لتتمكن من التأكيد.")
+        else:
+            for via_wa, label, key in ((False, "📌 تأكيد وإرسال للنظام", "submit"),
+                                       (True, "💬 تأكيد وإرسال للنظام + واتساب", "submit_wa")):
+                if st.button(label, key=f"{key}_{prefix}_mode", use_container_width=True):
+                    try:
+                        oid, wa = place_order(st.session_state.cart, payment, delivery, xy, via_wa)
+                        st.session_state.last_order = {"id": oid, "wa": wa}
+                        st.session_state.cart = []
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"خطأ أثناء إرسال الطلب: {e}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -436,6 +635,7 @@ categories = [
 # ============================================================
 # التنقل العلوي
 # ============================================================
+st.caption(f"👤 {st.session_state.customer_name}")
 nav_cols = st.columns(3)
 with nav_cols[0]:
     if st.button("🏠 الرئيسية", use_container_width=True):
@@ -464,7 +664,7 @@ if st.session_state.nav_tab == "الرئيسية":
     st.markdown(
         """
         <div class="kg-header">
-            <div class="kg-header-title">🛒 Halago</div>
+            <div class="kg-header-title">🛒 بوابة الكرك</div>
             <div class="kg-header-sub">Karak Gate • اطلب ما تريد من متاجر الكرك بكل سهولة</div>
         </div>
         """,
@@ -498,7 +698,6 @@ if st.session_state.nav_tab == "الرئيسية":
             if m_data.get("map_link"):
                 st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
 
-            # (جديد) بحث داخل المتجر + تقسيم صفحات
             sq = st.text_input("🔎 ابحث عن صنف داخل هذا المتجر...", value=st.session_state.store_q, key="store_q_input")
             if sq.strip() != st.session_state.store_q:
                 st.session_state.store_q = sq.strip()
@@ -531,12 +730,9 @@ if st.session_state.nav_tab == "الرئيسية":
                     with p_col3:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("➕ إضافة للسلة", key=f"add_store_p_{pi}_{p['id']}", use_container_width=True):
-                            st.session_state.cart.append({
-                                "name": f"{item_name} ({quantity} {unit})",
-                                "price": price,
-                                "merchant": mname
-                            })
+                            add_to_cart(p["id"], f"{item_name} ({quantity} {unit})", price, mname)
                             st.toast(f"تمت إضافة {item_name} إلى السلة!")
+                            st.rerun()
                     
                     st.markdown("<hr style='margin:10px 0; border:0; border-top:1px solid #F1F5F9;'>", unsafe_allow_html=True)
 
@@ -651,10 +847,8 @@ if st.session_state.nav_tab == "الرئيسية":
                         
                         if st.button(f"🛒 تصفح أصناف {sname}", key=f"enter_store_{mi+sj}", use_container_width=True):
                             st.session_state.selected_merchant = sname
-                            st.session_state.store_q = ""
+                            st.session_state.store_q = current_search if current_search else ""
                             st.session_state.store_page = 0
-                            if current_search:
-                                st.session_state.store_q = current_search
                             st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -684,7 +878,6 @@ elif st.session_state.nav_tab == "الطلبات":
                 status = ord_item.get('order_status', 'قيد التجهيز')
                 driver = ord_item.get('driver_name', '')
                 
-                # (مصلح) خطوات الرحلة مطابقة لحالات النظام الفعلية
                 steps = ["قيد التجهيز", "جاهز للاستلام", "في الطريق", "تم التوصيل"]
                 status_to_idx = {
                     "قيد التجهيز": 0, "جاهز": 1, "جاهز للاستلام": 1,
@@ -721,7 +914,8 @@ elif st.session_state.nav_tab == "الطلبات":
                     with col_d2:
                         st.markdown("⏱ **الوقت المتوقع للوصول:** `خلال 15-20 دقيقة`")
 
-                st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#0F172A; color:white; padding:6px 12px; border-radius:6px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل (مسار الرحلة)</a></div>', unsafe_allow_html=True)
+                if st.session_state.customer_map_link:
+                    st.markdown(f'<div style="margin-top:10px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="background:#0F172A; color:white; padding:6px 12px; border-radius:6px; font-size:12px; text-decoration:none; display:inline-block;">🗺 عرض موقع تسليم الطلب على خرائط جوجل</a></div>', unsafe_allow_html=True)
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
@@ -739,102 +933,100 @@ elif st.session_state.nav_tab == "الطلبات":
 
 
 # ============================================================
-# 3. الحساب وعنوان التوصيل مع ربط الخريطة الفعّال
+# 3. الحساب وعنوان التوصيل
 # ============================================================
 elif st.session_state.nav_tab == "الحساب":
     st.markdown(
         """
         <div class="kg-header">
             <div class="kg-header-title">👤 حسابي وعنوان التوصيل</div>
-            <div class="kg-header-sub">قم بتحديث معلوماتك، تحديد موقعك الجغرافي برابط خرائط جوجل، أو إدارة حسابك بكل سهولة</div>
+            <div class="kg-header-sub">حدّث معلوماتك وموقعك على خرائط جوجل ليصلك الطلب بدقة</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.session_state.customer_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
-    
-    old_phone_val = st.session_state.phone
-    st.session_state.phone = st.text_input("رقم الهاتف (المعرف الأساسي):", value=st.session_state.phone)
-    
-    st.session_state.customer_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
-    st.session_state.customer_address = st.text_area("تفاصيل العنوان الجديد أو المنطقة (مثال: المرج، الشارع الرئيسي):", value=st.session_state.customer_address)
-    st.session_state.delivery_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
+    st.info(f"📞 رقم الهاتف: {st.session_state.phone}  (لتغيير الرقم أنشئ حسابًا جديدًا)")
 
-    st.markdown("📍 **الموقع الجغرافي (ربط رابط خرائط جوجل الفعّال):**")
-    st.markdown("<p style='font-size:12px; color:#64748B; margin-top:-5px;'>يُرجى إدخال رابط فعال من خرائط جوجل لموقعك بدقة لضمان وصول السائق للمنطقة فوراً.</p>", unsafe_allow_html=True)
+    with st.form("account_form"):
+        a_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
+        a_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
+        a_addr = st.text_area("عنوان التوصيل (المنطقة، الشارع، أقرب معلم):", value=st.session_state.customer_address)
+        a_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
+        st.markdown("📍 **الموقع الجغرافي (رابط خرائط جوجل):**")
+        a_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+        save_btn = st.form_submit_button("💾 حفظ وتحديث البيانات", use_container_width=True)
 
-    st.session_state.customer_map_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
-
-    map_cols = st.columns(2)
-    with map_cols[0]:
-        if st.button("🌐 فتح خرائط جوجل لنسخ الرابط"):
-            st.markdown('<meta http-equiv="refresh" content="0;url=https://maps.google.com">', unsafe_allow_html=True)
-            st.info("💡 تم توجيهك لخرائط جوجل. ابحث عن موقعك، انسخ رابط المشاركة (Share Link)، ثم الصقه في الحقل أعلاه.")
-    with map_cols[1]:
-        if st.button("📍 تعيين موقع افتراضي (الكرك - المرج)"):
-            st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-            st.success("✅ تم تعيين موقع المرج - الكرك افتراضياً بنجاح!")
-            st.rerun()
-
-    # معاينة الرابط الفعّال إذا كان موجوداً
-    if st.session_state.customer_map_link:
-        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 انقر هنا لمعاينة موقعك المسجل على خريطة جوجل (تأكيد فعالية الرابط)</a></div>', unsafe_allow_html=True)
-        # (جديد) تأكيد أن الرابط يمكن قراءة إحداثياته
-        if GEO_OK:
-            if customer_xy():
-                st.caption("✅ تم التعرّف على إحداثيات موقعك، وسيظهر موقعك للسائق على الخريطة.")
-            else:
-                st.caption("⚠️ لم نستطع قراءة إحداثيات هذا الرابط. جرّب رابط المشاركة من تطبيق خرائط جوجل (Share).")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # أزرار الإجراءات المستقلة
-    col_b1, col_b2, col_b3 = st.columns(3)
-
-    with col_b1:
-        if st.button("💾 حفظ وتحديث البيانات", use_container_width=True):
+    if save_btn:
+        if not a_name.strip() or not a_addr.strip():
+            st.error("الاسم والعنوان مطلوبان.")
+        else:
             try:
-                sb.table("customers").upsert(
-                    {
-                        "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
-                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
-                    },
-                    on_conflict="phone"
-                ).execute()
-                st.success("🎉 تم حفظ وتحديث بياناتك ورابط الموقع بنجاح!")
+                st.session_state.customer_name = a_name.strip()
+                st.session_state.customer_email = a_email.strip()
+                st.session_state.customer_address = a_addr.strip()
+                st.session_state.delivery_notes = a_notes.strip()
+                st.session_state.customer_map_link = a_link.strip()
+                sb.table("customers").update(customer_payload(st.session_state.phone)).eq("id", st.session_state.customer_id).execute()
+                st.success("🎉 تم حفظ بياناتك بنجاح!")
             except Exception as e:
                 st.error(f"خطأ أثناء الحفظ: {e}")
 
+    if st.session_state.customer_map_link:
+        st.markdown(f'<div style="margin:10px 0; padding:10px; background:#FFF8F5; border:1px solid #FF5722; border-radius:8px;"><a href="{st.session_state.customer_map_link}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none;">🗺 معاينة موقعك المسجل على خرائط جوجل</a></div>', unsafe_allow_html=True)
+        if GEO_OK:
+            if customer_xy():
+                st.caption("✅ تم التعرّف على إحداثيات موقعك، وسيظهر للسائق على الخريطة.")
+            else:
+                st.caption("⚠️ لم نستطع قراءة إحداثيات هذا الرابط. جرّب رابط المشاركة (Share) من تطبيق خرائط جوجل.")
+
+    map_cols = st.columns(2)
+    with map_cols[0]:
+        st.link_button("🌐 افتح خرائط جوجل لنسخ الرابط", "https://maps.google.com", use_container_width=True)
+    with map_cols[1]:
+        if st.button("📍 تعيين موقع افتراضي (الكرك - المرج)", use_container_width=True):
+            st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
+            try:
+                sb.table("customers").update(customer_payload(st.session_state.phone)).eq("id", st.session_state.customer_id).execute()
+            except Exception:
+                pass
+            st.rerun()
+
+    with st.expander("🔐 تغيير رمز PIN"):
+        with st.form("pin_change_form"):
+            old_pin = st.text_input("PIN الحالي", type="password", max_chars=4)
+            new_pin = st.text_input("PIN الجديد (4 أرقام)", type="password", max_chars=4)
+            go_pin = st.form_submit_button("تغيير PIN")
+        if go_pin:
+            row = find_by_phone(sb, "customers", st.session_state.phone)
+            ok, msg = check_pin(sb, "customers", row, old_pin) if row else (False, "الحساب غير موجود")
+            if not ok:
+                st.error(msg if msg != NO_PIN else "لا يوجد PIN حالي.")
+            elif not valid_pin(new_pin):
+                st.error("PIN الجديد يجب أن يكون 4 أرقام.")
+            else:
+                set_pin(sb, "customers", row["id"], row["phone"], new_pin)
+                st.success("تم تغيير PIN بنجاح.")
+
+    col_b1, col_b2 = st.columns(2)
+    with col_b1:
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            for k in ("logged_in", "customer_id", "phone", "customer_name", "customer_email", "customer_address",
+                      "delivery_notes", "customer_map_link", "cart", "last_order"):
+                st.session_state.pop(k, None)
+            st.session_state.nav_tab = "الرئيسية"
+            st.rerun()
     with col_b2:
-        if st.button("🔄 تغيير الرقم / الانتقال لمنطقة أخرى", use_container_width=True):
-            try:
-                if old_phone_val != st.session_state.phone:
-                    sb.table("customers").delete().eq("phone", old_phone_val).execute()
-
-                sb.table("customers").upsert(
-                    {
-                        "name": st.session_state.customer_name,
-                        "phone": st.session_state.phone,
-                        "address": f"{st.session_state.customer_address} (ملاحظات: {st.session_state.delivery_notes}) | البريد: {st.session_state.customer_email} | رابط الخريطة: {st.session_state.customer_map_link}"
-                    },
-                    on_conflict="phone"
-                ).execute()
-                st.success("🎉 تم اعتماد الرقم الجديد والمنطقة ورابط الخريطة بنجاح!")
-            except Exception as e:
-                st.error(f"خطأ أثناء تحديث رقم الهاتف أو المنطقة: {e}")
-
-    with col_b3:
-        if st.button("🗑 مسح وحذف الحساب", use_container_width=True):
-            try:
-                sb.table("customers").delete().eq("phone", st.session_state.phone).execute()
-                st.session_state.customer_name = "أبو عدي"
-                st.session_state.customer_address = "الكرك - المرج"
-                st.session_state.delivery_notes = ""
-                st.session_state.customer_email = ""
-                st.session_state.customer_map_link = "https://maps.google.com/?q=31.1818,35.7011"
-                st.success("🗑 تم مسح وحذف بيانات الحساب من النظام بنجاح.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"خطأ أثناء حذف الحساب: {e}")
+        with st.expander("🗑 حذف حسابي نهائيًا"):
+            del_pin = st.text_input("أدخل PIN لتأكيد الحذف", type="password", max_chars=4, key="del_pin")
+            if st.button("حذف الحساب نهائيًا", use_container_width=True):
+                row = find_by_phone(sb, "customers", st.session_state.phone)
+                ok, msg = check_pin(sb, "customers", row, del_pin) if row else (False, "الحساب غير موجود")
+                if ok:
+                    sb.table("customers").delete().eq("id", row["id"]).execute()
+                    for k in ("logged_in", "customer_id", "phone", "customer_name", "customer_email", "customer_address",
+                              "delivery_notes", "customer_map_link", "cart", "last_order"):
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                else:
+                    st.error("رمز PIN غير صحيح.")
