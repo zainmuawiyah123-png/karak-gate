@@ -7,6 +7,18 @@ import base64
 import html
 from datetime import datetime
 import streamlit as st
+# كود إخفاء الشريط السفلي والقوائم
+hide_streamlit_style = """
+<style>
+  #MainMenu {visibility: hidden;}
+  footer {visibility: hidden;}
+  header {visibility: hidden;}
+ .stAppBottom {display: none !important;}
+  div[data-testid="stToolbar"] {visibility: hidden !important;}
+  </style>
+  """
+  st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
+  
 from supabase import create_client
 
 APP_NAME = "Halago"
