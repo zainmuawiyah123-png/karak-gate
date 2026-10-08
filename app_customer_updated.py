@@ -31,10 +31,11 @@ function removeFooter() {
 }
 setInterval(removeFooter, 500);
 </script>
-"""
+  """
+  
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
+  
+from supabase import create_client
   
 from supabase import create_client
 
