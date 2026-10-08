@@ -336,6 +336,16 @@ div[data-testid="column"]:has(.kg-cat-card) .stButton > button {
     font-size: 11px !important;
     min-height: 28px !important;
 }
+div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] {
+    width: fit-content !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+}
+div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] > div {
+    width: fit-content !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+}
 .kg-home-title { color:#FFFFFF !important; font-size:27px; font-weight:900; margin:0; }
 .kg-home-sub { color:#FFF7F2 !important; font-size:13px; margin-top:5px; }
 .kg-location { color:#FFFFFF !important; font-size:14px; margin-bottom:13px; }
