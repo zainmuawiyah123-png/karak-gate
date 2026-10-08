@@ -23,7 +23,6 @@ div.row-widget.stButton {bottom: 0px;}
 div[class*="viewerBadge"] {display: none !important;}
 </style>
 """
-  """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
   
 from supabase import create_client
