@@ -290,8 +290,8 @@ div[data-testid="column"] .stButton > button {
 
 /* ============ تصغير بطاقة الأقسام ============ */
 .kg-cat-card {
-    background: transparent;
-    border: 0;
+    background: #FFF7EF;
+    border: 1px solid #F6E6D7;
     border-radius: 12px;
     padding: 3px 2px;
     text-align: center;
@@ -323,7 +323,9 @@ div[data-testid="column"] .stButton > button {
     padding: 0 2px;
 }
 .kg-cat-card.kg-sel {
-    background: transparent;
+    background: #FFF0E6;
+    border-color: #FF8A5B;
+    box-shadow: 0 3px 10px rgba(244,81,11,.14);
 }
 /* زر القسم يكون بعرض النص فقط وليس بعرض العمود كاملًا */
 div[data-testid="column"]:has(.kg-cat-card) .stButton > button {
