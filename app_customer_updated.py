@@ -7,7 +7,6 @@ import base64
 import html
 from datetime import datetime
 import streamlit as st
-# كود إخفاء الشريط السفلي والقوائم
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden !important;}
@@ -16,28 +15,9 @@ footer {visibility: hidden !important;}
 .stAppBottom {display: none !important;}
 div[data-testid="stToolbar"] {visibility: hidden !important;}
 div[data-testid="stDecoration"] {visibility: hidden !important;}
-footer.viewerBadge_container__1QSob {display: none !important;}
-.viewerBadge_link__1S137 {display: none !important;}
-div[class*="viewerBadge"] {display: none !important;}
-#root > div:last-child {display: none !important;}
 </style>
-
-<script>
-// كود جافاسكريبت لحذف الشريط السفلي فور تحميل الصفحة
-const removeHostingBadge = () => {
-    const elements = document.querySelectorAll('footer, div[data-testid="stDecoration"], a[href*="streamlit.cloud"]');
-    elements.forEach(el => el.remove());
-    
-    // البحث عن أي عنصر يحتوي على نص استضافة ستريمليت وإخفاؤه
-    const allDivs = document.getElementsByTagName('div');
-    for (let div of allDivs) {
-        if (div.innerText && div.innerText.includes('Hosted with Streamlit')) {
-            div.style.display = 'none';
-        }
-    }
-};
-setInterval(removeHostingBadge, 100);
-</script>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 """  
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
   
