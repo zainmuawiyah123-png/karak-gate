@@ -9,19 +9,18 @@ from datetime import datetime
 import streamlit as st
 hide_streamlit_style = """
 <style>
-#MainMenu {visibility: hidden !important;}
-header {visibility: hidden !important;}
-footer {visibility: hidden !important;}
-.stAppBottom {display: none !important;}
-div[data-testid="stToolbar"] {visibility: hidden !important;}
-div[data-testid="stDecoration"] {visibility: hidden !important;}
+/* إخفاء شريط Streamlit السفلي */
+footer {
+    visibility: hidden;
+}
+
+/* إخفاء شارة GitHub */
+.stAppDeployButton {
+    display: none !important;
+}
 </style>
+ unsafe_allow_html=True),
 """
-
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-from supabase import create_client
-
 APP_NAME = "Halago"
 
 try:
