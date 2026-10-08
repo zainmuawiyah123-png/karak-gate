@@ -13,15 +13,26 @@ hide_streamlit_style = """
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
-.stAppBottom {display: none !important;}
-div[data-testid="stToolbar"] {visibility: hidden !important;}
-div[data-testid="stDecoration"] {visibility: hidden !important;}
-footer.viewerBadge_container__1QSob {display: none !important;}
-.viewerBadge_link__1S137 {display: none !important;}
-/* إخفاء الأزرار أو الأشرطة العائمة في أسفل الصفحة */
-div.row-widget.stButton {bottom: 0px;}
-div[class*="viewerBadge"] {display: none !important;}
 </style>
+
+<script>
+// كود جافاسكريبت لحذف الفوتر وشريط الاستضافة من جذوره
+function removeFooter() {
+    const footers = document.querySelectorAll('footer, div[data-testid="stDecoration"], .viewerBadge_container__1QSob');
+    footers.forEach(el => el.remove());
+    
+    // البحث عن شريط Streamlit المخصص في الأسفل وحذفه
+    const elements = document.querySelectorAll('*');
+    elements.forEach(el => {
+        if (el.innerText && el.innerText.includes('Hosted with Streamlit')) {
+            el.style.display = 'none';
+        }
+    });
+}
+setInterval(removeFooter, 500);
+</script>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
   
