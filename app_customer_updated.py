@@ -10,12 +10,19 @@ import streamlit as st
 # كود إخفاء الشريط السفلي والقوائم
 hide_streamlit_style = """
 <style>
-  #MainMenu {visibility: hidden;}
-  footer {visibility: hidden;}
-  header {visibility: hidden;}
- .stAppBottom {display: none !important;}
-  div[data-testid="stToolbar"] {visibility: hidden !important;}
-  </style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+.stAppBottom {display: none !important;}
+div[data-testid="stToolbar"] {visibility: hidden !important;}
+div[data-testid="stDecoration"] {visibility: hidden !important;}
+footer.viewerBadge_container__1QSob {display: none !important;}
+.viewerBadge_link__1S137 {display: none !important;}
+/* إخفاء الأزرار أو الأشرطة العائمة في أسفل الصفحة */
+div.row-widget.stButton {bottom: 0px;}
+div[class*="viewerBadge"] {display: none !important;}
+</style>
+"""
   """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
   
