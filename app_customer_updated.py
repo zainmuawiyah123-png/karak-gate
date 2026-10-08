@@ -17,7 +17,7 @@ hide_streamlit_style = """
   div[data-testid="stToolbar"] {visibility: hidden !important;}
   </style>
   """
-  st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)  
   
 from supabase import create_client
 
