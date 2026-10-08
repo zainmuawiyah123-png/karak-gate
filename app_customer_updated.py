@@ -284,6 +284,8 @@ div[data-testid="column"] .stButton > button {
     margin-top: 4px;
     font-weight: 700;
 }
+.kg-rating-stars { color:#F9A825 !important; letter-spacing:1px; }
+.kg-rating-value { color:#64748B !important; font-size:11px; font-weight:500; }
 
 @keyframes kgfade { from {opacity:0; transform:scale(.92);} to {opacity:1; transform:scale(1);} }
 @keyframes kgspin { to { transform: rotate(360deg); } }
@@ -523,19 +525,23 @@ def display_image(value, width=100, fallback="🛒"):
 # التقييم اليدوي (نجوم من حقل rating في جدول merchants)
 # ============================================================
 def render_rating(merchant):
-    """يعرض نجوم التقييم من الحقل rating (0-5)."""
+    """يعرض نجوم التقييم أسفل المتجر، مع دعم أسماء الحقول الشائعة."""
     try:
-        rating = float(merchant.get("rating") or 0)
+        raw_rating = (
+            merchant.get("rating")
+            if merchant.get("rating") is not None
+            else merchant.get("avg_rating", merchant.get("average_rating", 0))
+        )
+        rating = max(0.0, min(5.0, float(raw_rating or 0)))
     except Exception:
         rating = 0.0
-    if rating <= 0:
-        return
     full = int(rating)
     half = 1 if (rating - full) >= 0.5 else 0
     empty = 5 - full - half
     stars = "★" * full + ("⯨" if half else "") + "☆" * empty
+    label = f"({rating:.1f})" if rating > 0 else "(لا يوجد تقييم بعد)"
     st.markdown(
-        f"<div class='kg-rating'>{stars} <span style='color:#64748B !important; font-weight:500;'>({rating:.1f})</span></div>",
+        f"<div class='kg-rating'><span class='kg-rating-stars'>{stars}</span> <span class='kg-rating-value'>{label}</span></div>",
         unsafe_allow_html=True
     )
 
