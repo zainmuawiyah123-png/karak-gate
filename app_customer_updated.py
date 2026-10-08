@@ -33,7 +33,9 @@ import io
 import re
 import time
 import base64
+import json
 import urllib.parse
+import urllib.request
 from datetime import datetime
 
 import streamlit as st
@@ -64,6 +66,28 @@ def push_ready():
     try:
         return bool(st.secrets.get("SUPABASE_SERVICE_KEY")) and bool(st.secrets.get("VAPID_PRIVATE_KEY"))
     except Exception:
+        return False
+
+
+def telegram_send(text):
+    """إرسال إشعار تيليجرام عند ضبط TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return False
+    try:
+        payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
+        request = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        return bool(result.get("ok"))
+    except Exception:
+        # لا نمنع تسجيل الطلب إذا كان تيليجرام متوقفًا أو إعداداته ناقصة.
         return False
 
 
@@ -134,12 +158,12 @@ div[class*="stStatusWidget"] {
     pointer-events: none !important;
 }
 .stApp {
-    background: linear-gradient(135deg, #F4F6F8 0%, #E9ECEF 100%) !important;
+    background: #FFFFFF !important;
     color: #2D3142 !important;
 }
 .block-container {
-    padding-top: 1rem !important;
-    padding-bottom: 3rem !important;
+    padding-top: 0.55rem !important;
+    padding-bottom: 4rem !important;
     max-width: 1400px !important;
 }
 h1, h2, h3, h4, h5, h6, p, label, span {
@@ -159,11 +183,11 @@ div[data-testid="column"] .stButton > button {
     width: 100% !important;
 }
 .kg-header {
-    background: linear-gradient(135deg, #E64A19, #FF7043);
-    border-radius: 14px;
-    padding: 14px 18px;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 15px rgba(230,74,25,0.2);
+    background: linear-gradient(135deg, #F4510B 0%, #FF6B1A 100%);
+    border-radius: 0 0 28px 28px;
+    padding: 22px 20px 25px;
+    margin: -10px -5px 18px;
+    box-shadow: 0 8px 22px rgba(244,81,11,0.22);
 }
 .kg-header-title {
     color: white !important;
@@ -280,6 +304,25 @@ div[data-testid="column"] .stButton > button {
     background: #FFF8F5;
     border-color: #E64A19;
     box-shadow: 0 4px 15px rgba(230,74,25,0.2);
+}
+.kg-home-title { color:#FFFFFF !important; font-size:27px; font-weight:900; margin:0; }
+.kg-home-sub { color:#FFF7F2 !important; font-size:13px; margin-top:5px; }
+.kg-location { color:#FFFFFF !important; font-size:14px; margin-bottom:13px; }
+.kg-location b { color:#FFFFFF !important; }
+.kg-search-hint { background:#FFFFFF; color:#64748B !important; border-radius:28px; padding:13px 18px; font-size:15px; margin-top:13px; box-shadow:0 3px 10px rgba(0,0,0,.12); }
+.kg-section-title { font-size:20px; font-weight:900; color:#202124 !important; margin:20px 0 10px; }
+.kg-promo { background:linear-gradient(105deg,#FFF0E5,#FFE0CC); border-radius:22px; padding:20px; min-height:145px; margin:18px 0; border:1px solid #FFE0CC; overflow:hidden; }
+.kg-promo-title { color:#5B1710 !important; font-size:22px; font-weight:900; line-height:1.25; max-width:58%; }
+.kg-promo-sub { color:#7A2A1C !important; font-size:13px; margin-top:8px; max-width:58%; }
+.kg-promo-badge { display:inline-block; background:#5B1710; color:#D9FF00 !important; padding:7px 12px; margin-top:13px; font-size:18px; font-weight:900; transform:rotate(-3deg); }
+.kg-cat-card img { background:#FFF7F0; }
+@media (max-width: 640px) {
+    .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
+    .kg-header { margin-left:-12px; margin-right:-12px; }
+    .kg-cat-card { height:102px; padding:9px 3px; }
+    .kg-cat-card img { width:52px !important; height:52px !important; }
+    .kg-cat-card .kg-cat-name { font-size:12px; }
+    .kg-promo-title { font-size:19px; }
 }
 </style>
 """,
@@ -665,6 +708,7 @@ def place_order(cart, payment, delivery, xy, via_whatsapp=False):
             send_push("admin", 0, "Halago", f"وصل طلب جديد رقم #{oid}")
         except Exception:
             pass
+    telegram_send(wa_order_message(oid, cart, delivery, total, payment))
     wa = None
     if via_whatsapp:
         wa = f"https://wa.me/{WA_NUMBER}?text=" + urllib.parse.quote(wa_order_message(oid, cart, delivery, total, payment))
@@ -808,22 +852,27 @@ with nav_cols[2]:
 # ============================================================
 if st.session_state.nav_tab == "الرئيسية":
 
+    cart_count = sum(int(item.get("qty", 1)) for item in st.session_state.cart)
     st.markdown(
-        """
+        f"""
         <div class="kg-header">
-            <div class="kg-header-title">🛒 Halago</div>
-            <div class="kg-header-sub">هلا بك • اطلب ما تريد من متاجر الكرك بكل سهولة</div>
+            <div class="kg-location">📍 التوصيل إلى <b>{st.session_state.customer_address or 'عنوانك'}</b>　⌄</div>
+            <div class="kg-home-title">🛒 Halago</div>
+            <div class="kg-home-sub">كل ما تحتاجه من متاجر الكرك في مكان واحد</div>
+            <div class="kg-search-hint">⌕　ابحث عن مطعم أو متجر أو صنف</div>
+            <div style="color:#FFFFFF; margin-top:12px; font-size:13px;">🛍️ السلة: <b>{cart_count}</b> صنف</div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # ============ الإعلان المشوّق (خلفية زرقاء + نص أصفر) ============
+    # ============ بانر تسويقي ============
     st.markdown(
         """
-        <div class="kg-ad">
-            <span>🎉 اطلب الآن من Halago واستمتع بتوصيل سريع لباب بيتك! 🎉</span><br>
-            <span style="font-size:13px;">✨ عروض يومية • متاجر موثوقة • خدمة مميزة 24/7 ✨</span>
+        <div class="kg-promo">
+            <div class="kg-promo-title">جاهز لتجربة<br>نكهة جديدة؟</div>
+            <div class="kg-promo-sub">اكتشف أفضل المتاجر والعروض القريبة منك</div>
+            <span class="kg-promo-badge">عروض يومية</span>
         </div>
         """,
         unsafe_allow_html=True
@@ -928,7 +977,7 @@ if st.session_state.nav_tab == "الرئيسية":
         if user_input != st.session_state.search_query:
             st.session_state.search_query = user_input
 
-        st.subheader("📁 الأقسام الرئيسية")
+        st.markdown("<div class='kg-section-title'>استكشف الأقسام</div>", unsafe_allow_html=True)
 
         # ===== بطاقات الأقسام (مصغّرة) =====
         cols_per_row = 4
@@ -962,7 +1011,7 @@ if st.session_state.nav_tab == "الرئيسية":
         left, right = st.columns([2.2, 1], gap="large")
 
         with left:
-            st.subheader("🏬 المتاجر المعتمدة (اضغط على أي متجر لاستعراض أصنافه)")
+            st.markdown("<div class='kg-section-title'>المتاجر القريبة منك</div>", unsafe_allow_html=True)
 
             if st.session_state.selected_category == "الكل":
                 filtered_merchants = all_merchants
