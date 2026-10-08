@@ -15,7 +15,7 @@ try:
 except Exception:
     PUSH_IMPORT_OK = False
 
-st.set_page_config(page_title="بوابة السائقين - Karak Gate", page_icon="🛵", layout="wide")
+st.set_page_config(page_title="بوابة السائقين - Halago", page_icon="🛵", layout="wide")
 
 st.markdown(
     """
@@ -68,7 +68,7 @@ def store_name_from(details):
 def notify_admin(text):
     if PUSH_ON:
         try:
-            send_push("admin", 0, "بوابة الكرك - السائق", text)
+            send_push("admin", 0, "Halago - السائق", text)
         except Exception:
             pass
 
@@ -100,7 +100,7 @@ o.type='sine';o.frequency.setValueAtTime(880,a.currentTime+t);g.gain.setValueAtT
 o.connect(g);g.connect(a.destination);o.start(a.currentTime+t);o.stop(a.currentTime+t+0.25);});}catch(e){}
 </script>"""
 
-st.title("🛵 بوابة السائقين ومناديب التوصيل - Karak Gate")
+st.title("🛵 بوابة السائقين ومناديب التوصيل - Halago")
 
 if "driver_step" not in st.session_state:
     st.session_state.driver_step = "login_or_register"
@@ -297,7 +297,7 @@ elif st.session_state.driver_step == "dashboard":
             if is_cash and not cash_done:
                 st.caption("لإغلاق الطلب أكّد أولًا استلام المبلغ نقدًا.")
 
-            wa_msg = urllib.parse.quote(f"مرحباً، معك كابتن التوصيل من بوابة الكرك بخصوص طلبك رقم #{o_id}، أنا في الطريق إليك.")
+            wa_msg = urllib.parse.quote(f"مرحباً، معك كابتن التوصيل من Halago بخصوص طلبك رقم #{o_id}، أنا في الطريق إليك.")
             st.link_button("💬 مراسلة الزبون عبر الواتساب", f"https://wa.me/{wa_number(o.get('customer_phone'))}?text={wa_msg}",
                            use_container_width=True)
         st.markdown("---")
