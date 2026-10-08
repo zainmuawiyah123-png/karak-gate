@@ -9,13 +9,18 @@ from datetime import datetime
 import streamlit as st
 hide_streamlit_style = """
 <style>
-/* إخفاء شريط Streamlit السفلي */
-footer {
-    visibility: hidden;
+/* إخفاء التذييل وشريط الحالة */
+footer,
+[data-testid="stFooter"],
+[data-testid="stStatusWidget"] {
+    display: none !important;
 }
 
-/* إخفاء شارة GitHub */
-.stAppDeployButton {
+/* إخفاء شارة GitHub / النشر */
+.stAppDeployButton,
+[data-testid="stAppDeployButton"],
+[data-testid="stGitHubIcon"],
+a[href*="github.com"] {
     display: none !important;
 }
 </style>
