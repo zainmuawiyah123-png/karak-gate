@@ -62,7 +62,35 @@ try:
 except Exception:
     PUSH_IMPORT_OK = False
 
-from auth_pin import (valid_pin, valid_phone, norm_phone, set_pin, find_by_phone, check_pin, NO_PIN)
+# ---- الدخول برقم الهاتف فقط (بدون رمز PIN) ----
+try:
+    from auth_pin import valid_phone, norm_phone, find_by_phone
+except Exception:
+    def norm_phone(phone):
+        digits = re.sub(r"\D", "", str(phone or ""))
+        if digits.startswith("00962"):
+            digits = "0" + digits[5:]
+        elif digits.startswith("962"):
+            digits = "0" + digits[3:]
+        if digits and not digits.startswith("0"):
+            digits = "0" + digits
+        return digits
+
+    def valid_phone(phone):
+        return bool(re.fullmatch(r"07\d{8}", norm_phone(phone)))
+
+    def find_by_phone(sb, table, phone):
+        target = norm_phone(phone)
+        if not target:
+            return None
+        try:
+            rows = sb.table(table).select("*").execute().data or []
+        except Exception:
+            return None
+        for row in rows:
+            if norm_phone(row.get("phone")) == target:
+                return row
+        return None
 
 try:
     from streamlit_cookies_controller import CookieController
@@ -216,7 +244,7 @@ div[class*="stStatusWidget"] {
 }
 .block-container {
     padding-top: 0.55rem !important;
-    padding-bottom: 4rem !important;
+    padding-bottom: 6.5rem !important;
     max-width: 1400px !important;
 }
 h1, h2, h3, h4, h5, h6, p, label, span {
@@ -327,17 +355,15 @@ div[data-testid="column"] .stButton > button {
 @keyframes kgfade { from {opacity:0; transform:scale(.92);} to {opacity:1; transform:scale(1);} }
 @keyframes kgspin { to { transform: rotate(360deg); } }
 
-/* ============ تصغير بطاقة الأقسام ============ */
+/* ============ بطاقات الأقسام (دائرية بدون خلفية مستطيلة) ============ */
 .kg-cat-card {
-    background: #FFF7EF;
-    border: 1px solid #F6E6D7;
-    border-radius: 12px;
-    padding: 3px 2px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
     text-align: center;
-    margin: 0 auto 3px;
-    height: 70px;
-    width: 76px;
-    max-width: 76px;
+    margin: 0 auto 4px;
+    width: 100%;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -345,14 +371,18 @@ div[data-testid="column"] .stButton > button {
     align-items: center;
 }
 .kg-cat-card img {
-    width: 44px !important;
-    height: 44px !important;
+    width: 64px !important;
+    height: 64px !important;
     object-fit: cover;
-    border-radius: 12px;
-    margin-bottom: 4px;
-    border: 1px solid #F1F5F9;
+    border-radius: 50%;
+    margin-bottom: 6px;
+    border: 2px solid #FFFFFF;
     background: #FFF7F0;
-    box-shadow: 0 2px 7px rgba(0,0,0,.08);
+    box-shadow: 0 3px 10px rgba(0,0,0,.10);
+}
+.kg-cat-card.kg-sel img {
+    border-color: #FF5722;
+    box-shadow: 0 0 0 3px rgba(255,87,34,.18);
 }
 .kg-cat-card .kg-cat-name {
     font-weight: 800;
@@ -364,32 +394,112 @@ div[data-testid="column"] .stButton > button {
     text-overflow: ellipsis;
     padding: 0 2px;
 }
-.kg-cat-card.kg-sel {
-    background: #FFF0E6;
-    border-color: #FF8A5B;
-    box-shadow: 0 3px 10px rgba(244,81,11,.14);
+/* اسم القسم أسفل الصورة — نص شفاف بدون أي إطار أو خلفية (نمط طلبات) */
+div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: -2px 0 0 !important;
 }
-/* زر القسم يكون بعرض النص فقط وليس بعرض العمود كاملًا */
-div[data-testid="column"]:has(.kg-cat-card) .stButton > button {
-    width: auto !important;
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button,
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button:hover,
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button:focus,
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button:active {
+    width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    padding: 3px 8px !important;
-    margin: 0 auto !important;
-    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    color: #2D3142 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
     font-size: 11px !important;
-    min-height: 28px !important;
+    font-weight: 800 !important;
+    line-height: 1.3 !important;
+    text-align: center !important;
 }
-div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] {
-    width: fit-content !important;
-    max-width: 100% !important;
-    margin: 0 auto !important;
+div[data-testid="column"]:has(.kg-cat-card) .stButton > button p {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    color: inherit !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
-div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] > div {
-    width: fit-content !important;
-    max-width: 100% !important;
-    margin: 0 auto !important;
+div[data-testid="column"]:has(.kg-cat-card.kg-sel) .stButton > button {
+    color: #FF5722 !important;
 }
+
+/* ============ اسم القسم تحت الصورة (بالوسط، بدون إطار) ============ */
+div[class*="st-key-cat_card_"] { width: 100% !important; display: flex !important; justify-content: center !important; }
+div[class*="st-key-cat_card_"] div[data-testid="stButton"] { width: auto !important; display: flex; justify-content: center; }
+div[class*="st-key-cat_card_"] button, div[class*="st-key-cat_card_"] button:hover,
+div[class*="st-key-cat_card_"] button:focus, div[class*="st-key-cat_card_"] button:active {
+    background: transparent !important; border: 0 !important; box-shadow: none !important; outline: none !important;
+    padding: 0 !important; margin: 0 auto !important; min-height: 0 !important; width: auto !important; height: auto !important;
+}
+div[class*="st-key-cat_card_"] button p { color: #2D3142 !important; font-size: 12px !important; font-weight: 800 !important; margin: 0 !important; text-align: center !important; }
+div[class*="st-key-cat_card_"] button:hover p { color: #FF5722 !important; }
+div[class*="st-key-cat_card_sel_"] button p { color: #FF5722 !important; }
+div[class*="st-key-clear_search_btn"] button {
+    background: #FFF3EE !important; color: #E64A19 !important; border: 1px solid #FFD2C0 !important;
+    border-radius: 22px !important; min-height: 36px !important; font-weight: 800 !important; box-shadow: none !important;
+}
+div[class*="st-key-clear_search_btn"] button p { color: inherit !important; margin: 0 !important; }
+
+/* ============ بطاقة المتجر (نمط طلبات) ============ */
+div[class*="st-key-store_card_"] {
+    background: #FFFFFF; border: 1px solid #EEF0F2; border-radius: 18px;
+    padding: 12px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.04);
+    transition: border-color .2s ease, box-shadow .2s ease;
+}
+div[class*="st-key-store_card_"]:hover { border-color: #FFB89C; box-shadow: 0 6px 18px rgba(255,87,34,.10); }
+div[class*="st-key-store_card_"] div[data-testid="stImage"] { width: 100% !important; }
+div[class*="st-key-store_card_"] img {
+    width: 100% !important; height: 104px !important; object-fit: cover !important;
+    border-radius: 14px !important; background: #FFF7F0;
+}
+.kg-sc-name { font-size: 17px; font-weight: 900; color: #202124 !important; line-height: 1.3; }
+.kg-sc-sub { font-size: 12px; color: #6B7280 !important; margin-top: 3px; }
+.kg-sc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+.kg-sc-meta span { font-size: 12px; font-weight: 700; color: #4B5563 !important; }
+.kg-pill { border-radius: 20px; padding: 2px 9px; }
+.kg-pill-rate { background: #FFF6DB; color: #B45309 !important; }
+.kg-pill-new { background: #E8F5E9; color: #2E7D32 !important; }
+.kg-pill-hot { background: #FFF0E6; color: #D84315 !important; }
+.kg-sc-badge { margin-top: 8px; font-size: 11px; font-weight: 800; color: #2E7D32 !important; }
+div[class*="st-key-enter_store_"] button {
+    background: #FFF3EE !important; color: #E64A19 !important; border: 1px solid #FFD2C0 !important;
+    border-radius: 12px !important; min-height: 38px !important; font-weight: 800 !important;
+    box-shadow: none !important; margin-top: 6px !important;
+}
+div[class*="st-key-enter_store_"] button p { color: inherit !important; margin: 0 !important; }
+div[class*="st-key-enter_store_"] button:hover { background: #FF5722 !important; color: #FFFFFF !important; border-color: #FF5722 !important; }
+.kg-section-count { font-size: 13px; font-weight: 700; color: #6B7280 !important; margin-right: 6px; }
+
+/* ============ السلة (نمط طلبات) ============ */
+.kg-cart-head { background: #FFFFFF; border: 1px solid #F1F1F1; border-radius: 16px; padding: 14px 16px; margin-bottom: 6px; }
+.kg-cart-title { font-size: 20px; font-weight: 900; color: #202124 !important; }
+.kg-cart-count { font-size: 13px; color: #6B7280 !important; padding-top: 6px; }
+.kg-cart-item { background: #FFFFFF; border: 1px solid #F4F4F5; border-radius: 14px; padding: 12px 14px; margin: 8px 0 4px; }
+.kg-cart-item-name { font-size: 15px; font-weight: 800; color: #202124 !important; }
+.kg-cart-item-sub { font-size: 12px; color: #6B7280 !important; margin-top: 3px; }
+.kg-qty { text-align: center; font-size: 16px; font-weight: 900; color: #202124 !important; padding-top: 5px; }
+div[class*="st-key-inc_"] button, div[class*="st-key-dec_"] button { border-radius: 12px !important; min-height: 34px !important; font-weight: 900 !important; }
+
+/* ============ بطاقة المتجر (نمط طلبات) ============ */
+.kg-store-row { font-size: 12px; color: #4B5563 !important; font-weight: 700; margin-top: 7px; }
+.kg-dot { color: #D1D5DB !important; margin: 0 5px; }
+
+/* ============ ترحيب + الموقع (نمط طلبات) ============ */
+.kg-greet { margin: 8px 0 4px; }
+.kg-greet-loc { font-size: 12px; font-weight: 800; color: #F4510B !important; }
+.kg-greet-title { font-size: 24px; font-weight: 900; color: #202124 !important; margin-top: 5px; }
+.kg-greet-sub { font-size: 14px; color: #6B7280 !important; margin-top: 3px; }
 .kg-home-title { color:#FFFFFF !important; font-size:27px; font-weight:900; margin:0; }
 .kg-home-sub { color:#FFF7F2 !important; font-size:13px; margin-top:5px; }
 .kg-location { color:#FFFFFF !important; font-size:14px; margin-bottom:13px; }
@@ -408,11 +518,48 @@ div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] > div {
 @media (max-width: 640px) {
     .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
     .kg-header { margin-left:-12px; margin-right:-12px; }
-    .kg-cat-card { height:67px; width:72px; max-width:72px; padding:1px; border-radius:10px; margin:0 auto 2px; }
-    .kg-cat-card img { width:44px !important; height:44px !important; margin-bottom:1px; }
-    .kg-cat-card .kg-cat-name { font-size:11px; }
+    .kg-cat-card img { width:56px !important; height:56px !important; border-radius:50%; margin-bottom:4px; }
+    .kg-greet-title { font-size:20px; }
     .kg-promo { height:52px; border-radius:13px; }
     .kg-marquee-item { font-size:13px; margin-right:55px; }
+}
+
+/* ============ شاشة الدخول (نمط طلبات) ============ */
+.kg-auth-hero { text-align: center; padding: 46px 0 8px; }
+.kg-auth-logo { font-size: 76px; line-height: 1; }
+.kg-auth-name { font-size: 40px; font-weight: 900; color: #F4510B !important; letter-spacing: 1px; margin-top: 6px; }
+.kg-auth-tag { font-size: 15px; color: #374151 !important; margin-top: 6px; }
+.kg-auth-card { background: #FFFFFF; border: 1px solid #F1F1F1; border-radius: 18px; padding: 16px 16px 8px; margin: 18px auto 10px; max-width: 520px; box-shadow: 0 8px 24px rgba(0,0,0,.05); text-align: center; }
+.kg-auth-cardtitle { font-size: 18px; font-weight: 900; color: #202124 !important; }
+.kg-auth-sub { font-size: 13px; color: #6B7280 !important; margin-top: 5px; padding-bottom: 10px; }
+
+/* ============ بطاقة المستخدم ============ */
+.kg-user-chip { display: inline-block; background: #FFF3EE; color: #D84315 !important; border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 800; margin: 2px 0 8px; }
+
+/* ============ عروض وبانرات (نمط طلبات) ============ */
+.kg-offer-card { border-radius: 16px; padding: 14px 16px; min-height: 118px; color: #FFFFFF !important; box-shadow: 0 6px 16px rgba(0,0,0,.10); margin-bottom: 8px; display: flex; flex-direction: column; justify-content: center; }
+.kg-offer-card.o1 { background: linear-gradient(135deg,#FF5722 0%,#FF8A50 100%); }
+.kg-offer-card.o2 { background: linear-gradient(135deg,#7B1FA2 0%,#AB47BC 100%); }
+.kg-offer-card.o3 { background: linear-gradient(135deg,#0B3D91 0%,#1976D2 100%); }
+.kg-offer-card .kg-offer-title { font-size: 17px; font-weight: 900; color: #FFFFFF !important; }
+.kg-offer-card .kg-offer-sub { font-size: 12px; color: #FFFFFF !important; opacity: .92; margin-top: 5px; }
+.kg-offer-card .kg-offer-tag { display: inline-block; margin-top: 9px; background: rgba(255,255,255,.22); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 800; color: #FFFFFF !important; width: fit-content; }
+
+/* ============ شريط سفلي (نمط طلبات) ============ */
+.kg-bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; height: 62px; background: #FFFFFF; border-top: 1px solid #EFEFEF; box-shadow: 0 -4px 14px rgba(0,0,0,.05); z-index: 9000; }
+div[class*="st-key-nav_home"], div[class*="st-key-nav_orders"], div[class*="st-key-nav_account"] { position: fixed; bottom: 9px; width: 30%; max-width: 180px; z-index: 9999; }
+div[class*="st-key-nav_home"] { left: 3%; }
+div[class*="st-key-nav_orders"] { left: 35%; }
+div[class*="st-key-nav_account"] { left: 67%; }
+div[class*="st-key-nav_home"] button, div[class*="st-key-nav_orders"] button, div[class*="st-key-nav_account"] button {
+    background: transparent !important; color: #FF5722 !important; border: 0 !important;
+    box-shadow: none !important; font-size: 12px !important; font-weight: 800 !important; min-height: 34px !important;
+}
+
+/* ============ شريط البحث المستدير ============ */
+div[class*="st-key-user_search_box_"] input, div[class*="st-key-store_q_input"] input {
+    border-radius: 26px !important; background: #F6F6F6 !important; border: 1px solid #ECECEC !important;
+    padding: 12px 18px !important; font-size: 15px !important;
 }
 </style>
 """,
@@ -812,87 +959,57 @@ def customer_payload(phone):
 
 
 def render_auth():
+    """الدخول برقم الهاتف فقط — مرة واحدة، وتبقى الجلسة محفوظة على الجهاز."""
     st.markdown(
         """
-        <div class="kg-header">
-            <div class="kg-header-title">🛒 Halago</div>
-            <div class="kg-header-sub">سجّل دخولك أو أنشئ حسابًا جديدًا لتبدأ الطلب</div>
+        <div class="kg-auth-hero">
+            <div class="kg-auth-logo">🛒</div>
+            <div class="kg-auth-name">Halago</div>
+            <div class="kg-auth-tag">هلا بك... اطلب براحة</div>
+        </div>
+        <div class="kg-auth-card">
+            <div class="kg-auth-cardtitle">الدخول برقم الهاتف</div>
+            <div class="kg-auth-sub">أدخل رقمك مرة واحدة فقط، وسنحفظ جلستك على هذا الجهاز.</div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-    mode = st.radio("اختر:", ["تسجيل دخول", "حساب جديد"], horizontal=True, key="auth_mode")
 
-    if mode == "تسجيل دخول":
-        with st.form("login_form"):
-            phone = st.text_input("رقم الهاتف (مثال: 0797123456)")
-            pin = st.text_input("رمز PIN (4 أرقام)", type="password", max_chars=4)
-            remember_me = st.checkbox("تذكرني لمدة 30 يومًا على هذا الجهاز", value=True)
-            go = st.form_submit_button("دخول", use_container_width=True)
-        if go:
-            if not valid_phone(phone) or not valid_pin(pin):
-                st.error("أدخل رقم هاتف أردني صحيح ورمز PIN من 4 أرقام.")
-            else:
-                row = find_by_phone(sb, "customers", phone)
-                if not row:
-                    st.error("لا يوجد حساب بهذا الرقم. اختر «حساب جديد».")
-                else:
-                    ok, msg = check_pin(sb, "customers", row, pin)
-                    if ok:
-                        login_session(row)
-                        st.session_state.remember_me = remember_me
-                        if remember_me:
-                            remember_customer(row.get("phone") or phone)
-                        st.rerun()
-                    elif msg == NO_PIN:
-                        st.warning("حسابك قديم بلا رمز PIN. اختر «حساب جديد» بنفس الرقم لتعيين رمز PIN وتحديث بياناتك.")
-                    else:
-                        st.error(msg)
-    else:
-        with st.form("register_form"):
-            name = st.text_input("الاسم الكامل")
-            phone = st.text_input("رقم الهاتف (مثال: 0797123456)")
-            c1, c2 = st.columns(2)
-            with c1:
-                pin = st.text_input("اختر رمز PIN (4 أرقام)", type="password", max_chars=4)
-            with c2:
-                pin2 = st.text_input("أعد كتابة PIN", type="password", max_chars=4)
-            address = st.text_area("عنوان التوصيل (المنطقة، الشارع، أقرب معلم)")
-            map_link = st.text_input("رابط موقعك على خرائط جوجل (اختياري)")
-            notes = st.text_input("ملاحظات لمندوب التوصيل (اختياري)")
-            go = st.form_submit_button("إنشاء الحساب", use_container_width=True)
-        if go:
-            if not name.strip() or not address.strip():
-                st.error("الاسم والعنوان مطلوبان.")
-            elif not valid_phone(phone):
-                st.error("رقم الهاتف غير صحيح (يجب أن يكون 07XXXXXXXX).")
-            elif not valid_pin(pin) or pin != pin2:
-                st.error("رمز PIN يجب أن يكون 4 أرقام ومتطابقًا في الخانتين.")
-            else:
-                existing = find_by_phone(sb, "customers", phone)
-                if existing and existing.get("pin_hash"):
-                    st.error("هذا الرقم مسجّل مسبقًا. استخدم «تسجيل دخول».")
-                else:
-                    try:
-                        st.session_state.customer_name = name.strip()
-                        st.session_state.customer_address = address.strip()
-                        st.session_state.customer_map_link = map_link.strip()
-                        st.session_state.delivery_notes = notes.strip()
-                        st.session_state.customer_email = ""
-                        np_ = norm_phone(phone)
-                        pl = customer_payload(np_)
-                        if existing:
-                            sb.table("customers").update(pl).eq("id", existing["id"]).execute()
-                            rid = existing["id"]
-                        else:
-                            rid = (sb.table("customers").insert(pl).execute().data or [{}])[0].get("id")
-                        set_pin(sb, "customers", rid, np_, pin)
-                        login_session(find_by_phone(sb, "customers", np_))
-                        st.session_state.remember_me = True
-                        remember_customer(np_)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"تعذر إنشاء الحساب: {e}")
+    with st.form("phone_login_form"):
+        phone = st.text_input("رقم الهاتف", placeholder="07XXXXXXXX")
+        go = st.form_submit_button("متابعة", use_container_width=True)
+
+    st.caption("بالدخول أنت توافق على استخدام رقمك لتوصيل طلباتك فقط.")
+
+    if not go:
+        return
+
+    if not valid_phone(phone):
+        st.error("أدخل رقم هاتف أردني صحيح مثل 0797123456.")
+        return
+
+    np_ = norm_phone(phone)
+    try:
+        row = find_by_phone(sb, "customers", np_)
+        if not row:
+            # إنشاء حساب جديد برقم الهاتف فقط (بدون PIN)
+            try:
+                sb.table("customers").insert({
+                    "name": "", "phone": np_, "address": "",
+                    "delivery_notes": "", "map_link": "", "email": "",
+                }).execute()
+            except Exception:
+                sb.table("customers").insert({"phone": np_}).execute()
+            row = find_by_phone(sb, "customers", np_)
+        if not row:
+            st.error("تعذر إنشاء الحساب، حاول مرة أخرى.")
+            return
+        login_session(row)
+        st.session_state.remember_me = True
+        remember_customer(np_)
+        st.rerun()
+    except Exception as e:
+        st.error(f"تعذر تسجيل الدخول: {e}")
 
 
 restore_customer_session()
@@ -1009,7 +1126,11 @@ def add_to_cart(pid, name, price, merchant):
 
 def render_cart(prefix):
     st.markdown('<div class="kg-cart">', unsafe_allow_html=True)
-    st.subheader("🛍 سلة الطلبات والفاتورة")
+    st.markdown(
+        "<div class='kg-cart-head'><div class='kg-cart-title'>🛍 السلة</div>"
+        "<div class='kg-cart-count'>راجع أصنافك وأكمل طلبك</div></div>",
+        unsafe_allow_html=True,
+    )
 
     last = st.session_state.get("last_order")
     if last:
@@ -1031,22 +1152,37 @@ def render_cart(prefix):
     else:
         subtotal = cart_subtotal(st.session_state.cart)
 
+        _hc1, _hc2 = st.columns([2, 1])
+        with _hc1:
+            _nitems = sum(int(_i.get("qty", 1)) for _i in st.session_state.cart)
+            st.markdown(f"<div class='kg-cart-count'>{_nitems} صنف في سلتك</div>", unsafe_allow_html=True)
+        with _hc2:
+            if st.button("🗑 إفراغ السلة", key=f"clear_cart_{prefix}", use_container_width=True):
+                st.session_state.cart = []
+                st.session_state.coupon_code = ""
+                st.rerun()
+
         for ci, item in enumerate(st.session_state.cart):
             q = int(item.get("qty", 1))
-            st.write(f"🔹 **{item['name']}** ×{q}")
-            c1, c2, c3 = st.columns([2, 1, 1])
-            with c1:
-                st.caption(f"{item['merchant']} | {safe_price(item['price']) * q:.2f} د.أ")
-            with c2:
-                if st.button("➕", key=f"inc_{prefix}_{ci}"):
-                    item["qty"] = q + 1
-                    st.rerun()
-            with c3:
-                if st.button("➖", key=f"dec_{prefix}_{ci}"):
+            st.markdown(
+                f"<div class='kg-cart-item'><div class='kg-cart-item-name'>{html.escape(str(item['name']))}</div>"
+                f"<div class='kg-cart-item-sub'>{html.escape(str(item['merchant']))} · "
+                f"{safe_price(item['price']) * q:.2f} د.أ</div></div>",
+                unsafe_allow_html=True,
+            )
+            q1, q2, q3 = st.columns([1, 1, 1])
+            with q1:
+                if st.button("➖", key=f"dec_{prefix}_{ci}", use_container_width=True):
                     if q > 1:
                         item["qty"] = q - 1
                     else:
                         st.session_state.cart.pop(ci)
+                    st.rerun()
+            with q2:
+                st.markdown(f"<div class='kg-qty'>{q}</div>", unsafe_allow_html=True)
+            with q3:
+                if st.button("➕", key=f"inc_{prefix}_{ci}", use_container_width=True):
+                    item["qty"] = q + 1
                     st.rerun()
 
         xy = customer_xy()
@@ -1107,11 +1243,6 @@ def render_cart(prefix):
         if not xy:
             st.warning("رابط موقعك على خرائط جوجل غير محدد أو غير صالح (من صفحة حسابي)، لن يرى السائق موقعك على الخريطة.")
 
-        if st.button("🗑 تفريغ السلة", key=f"clear_cart_{prefix}", use_container_width=True):
-            st.session_state.cart = []
-            st.session_state.coupon_code = ""
-            st.rerun()
-
         payment = st.radio(
             "اختر طريقة الدفع:",
             ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
@@ -1139,6 +1270,90 @@ def render_cart(prefix):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
+
+# ============================================================
+# عناصر الشاشة الرئيسية (نمط طلبات)
+# ============================================================
+def _keyed_container(key):
+    try:
+        return st.container(key=key)
+    except TypeError:
+        return st.container()
+
+
+def render_home_greeting():
+    _cname = str(st.session_state.get("customer_name") or "").strip()
+    _greet = "مساء الخير" if datetime.now().hour >= 12 else "صباح الخير"
+    _line = f"{_greet} {_cname}" if _cname else _greet
+    st.markdown(
+        f"""
+        <div class="kg-greet">
+            <div class="kg-greet-title">{html.escape(_line)} ☀️</div>
+            <div class="kg-greet-sub">ماذا ترغب اليوم؟</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_home_offers():
+    st.markdown("<div class='kg-section-title'>🎁 عروض اليوم</div>", unsafe_allow_html=True)
+    _offers = [
+        ("o1", "خصم 10%", "على قيمة أصنافك باستخدام كود HALAGO10", "استخدم الكود"),
+        ("o2", "توصيل سريع", "متاجر الكرك قريبة منك وجاهزة للتوصيل", "اطلب الآن"),
+        ("o3", "كوبون ترحيبي", "خصم 1.00 د.أ على أول طلب بكود WELCOME", "جرّب الآن"),
+    ]
+    _cols = st.columns(3)
+    for _oi, (_cls, _t, _s, _tag) in enumerate(_offers):
+        with _cols[_oi % 3]:
+            st.markdown(
+                f"<div class='kg-offer-card {_cls}'>"
+                f"<div class='kg-offer-title'>{_t}</div>"
+                f"<div class='kg-offer-sub'>{_s}</div>"
+                f"<div class='kg-offer-tag'>{_tag}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+
+def render_store_card(store, key, search_text="", orders=None):
+    """بطاقة متجر موحّدة: صورة + اسم + تقييم + وقت وتكلفة التوصيل + زر دخول."""
+    sname = str(store.get("name") or "متجر")
+    scat = str(store.get("category") or "").strip()
+    sloc = str(store.get("location") or "").strip()
+    eta = html.escape(merchant_eta(store))
+    badge = html.escape(merchant_badge(store))
+    fee_value = store.get("delivery_fee")
+    fee_text = f"من {safe_price(fee_value):.2f} د.أ" if fee_value is not None else "حسب الموقع"
+    try:
+        rate = float(store.get("rating") or store.get("avg_rating") or 0)
+    except Exception:
+        rate = 0.0
+    rate = max(0.0, min(5.0, rate))
+    rate_html = (f"<span class='kg-pill kg-pill-rate'>★ {rate:.1f}</span>" if rate > 0
+                 else "<span class='kg-pill kg-pill-new'>جديد</span>")
+    hot_html = f"<span class='kg-pill kg-pill-hot'>🔥 {int(orders)} طلب</span>" if orders else ""
+    sub = html.escape(" • ".join(x for x in (scat, sloc) if x))
+
+    with _keyed_container(f"store_card_{key}"):
+        c_img, c_info = st.columns([1, 2.3], gap="small")
+        with c_img:
+            display_image(store.get("image_data"), width=120, fallback="🏬")
+        with c_info:
+            st.markdown(
+                f"<div class='kg-sc-name'>{html.escape(sname)}</div>"
+                f"<div class='kg-sc-sub'>{sub}</div>"
+                f"<div class='kg-sc-meta'>{rate_html}<span>⏱ {eta}</span><span>🚚 {fee_text}</span>{hot_html}</div>"
+                f"<div class='kg-sc-badge'>✓ {badge}</div>",
+                unsafe_allow_html=True,
+            )
+        if st.button("عرض المتجر", key=f"enter_store_{key}", use_container_width=True):
+            st.session_state.selected_merchant = sname
+            st.session_state.store_q = search_text or ""
+            st.session_state.store_page = 0
+            st.rerun()
+
+
 # ============================================================
 # الأقسام
 # ============================================================
@@ -1157,22 +1372,26 @@ categories = [
 # ============================================================
 # التنقل العلوي
 # ============================================================
-st.caption(f"👤 {st.session_state.customer_name}")
+st.markdown(
+    f"<div class='kg-user-chip'>👤 {html.escape(str(st.session_state.customer_name or st.session_state.phone))}</div>",
+    unsafe_allow_html=True,
+)
+st.markdown("<div class='kg-bottom-nav'></div>", unsafe_allow_html=True)
 nav_cols = st.columns(3)
 with nav_cols[0]:
-    if st.button("🏠 الرئيسية", use_container_width=True):
+    if st.button("🏠 الرئيسية", key="nav_home", use_container_width=True):
         st.session_state.nav_tab = "الرئيسية"
         st.session_state.selected_merchant = None
         st.session_state.search_query = ""
         st.session_state.search_input_key += 1
         st.rerun()
 with nav_cols[1]:
-    if st.button("📦 طلباتي والتتبع", use_container_width=True):
+    if st.button("📦 طلباتي", key="nav_orders", use_container_width=True):
         st.session_state.nav_tab = "الطلبات"
         st.session_state.selected_merchant = None
         st.rerun()
 with nav_cols[2]:
-    if st.button("👤 حسابي", use_container_width=True):
+    if st.button("👤 حسابي", key="nav_account", use_container_width=True):
         st.session_state.nav_tab = "الحساب"
         st.session_state.selected_merchant = None
         st.rerun()
@@ -1183,32 +1402,12 @@ with nav_cols[2]:
 # ============================================================
 if st.session_state.nav_tab == "الرئيسية":
 
-    cart_count = sum(int(item.get("qty", 1)) for item in st.session_state.cart)
     st.markdown(
         f"""
         <div class="kg-header">
-            <div class="kg-location">📍 التوصيل إلى <b>{st.session_state.customer_address or 'عنوانك'}</b>　⌄</div>
+            <div class="kg-location">📍 التوصيل إلى <b>{html.escape(str(st.session_state.customer_address or 'عنوانك'))}</b>　⌄</div>
             <div class="kg-home-title">🛒 Halago</div>
             <div class="kg-home-sub">كل ما تحتاجه من متاجر الكرك في مكان واحد</div>
-            <div class="kg-search-hint">⌕　ابحث عن مطعم أو متجر أو صنف</div>
-            <div style="color:#FFFFFF; margin-top:12px; font-size:13px;">🛍️ السلة: <b>{cart_count}</b> صنف</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # ============ شريط إعلانات متحرك مستمر ============
-    st.markdown(
-        """
-        <div class="kg-promo">
-            <div class="kg-marquee">
-                <span class="kg-marquee-item">🎉 جاهز لتجربة نكهة جديدة؟ <b>عروض يومية</b></span>
-                <span class="kg-marquee-item">🚚 اطلب الآن ووفر أكثر <b>توصيل سريع</b></span>
-                <span class="kg-marquee-item">🏬 متاجر الكرك بين يديك <b>اكتشف الآن</b></span>
-                <span class="kg-marquee-item">🎉 جاهز لتجربة نكهة جديدة؟ <b>عروض يومية</b></span>
-                <span class="kg-marquee-item">🚚 اطلب الآن ووفر أكثر <b>توصيل سريع</b></span>
-                <span class="kg-marquee-item">🏬 متاجر الكرك بين يديك <b>اكتشف الآن</b></span>
-            </div>
         </div>
         """,
         unsafe_allow_html=True
@@ -1307,70 +1506,71 @@ if st.session_state.nav_tab == "الرئيسية":
             render_cart("store")
 
     else:
+        render_home_greeting()
+
         user_input = st.text_input(
-            "🔍 ابحث عن متجر أو صنف (اكتب الحروف الأولى)...",
+            "search",
             value=st.session_state.search_query,
-            key=f"user_search_box_{st.session_state.search_input_key}"
+            key=f"user_search_box_{st.session_state.search_input_key}",
+            placeholder="🔍 ابحث عن مطعم أو متجر أو صنف ثم اضغط Enter",
+            label_visibility="collapsed",
         )
 
         current_search = user_input.strip()
         if current_search != st.session_state.search_query:
             st.session_state.search_query = current_search
 
-        st.markdown("<div class='kg-section-title'>استكشف الأقسام</div>", unsafe_allow_html=True)
+        if current_search:
+            if st.button("✕ مسح البحث والعودة للأقسام", key="clear_search_btn"):
+                st.session_state.search_query = ""
+                st.session_state.search_input_key += 1
+                st.rerun()
+        else:
+            st.markdown("<div class='kg-section-title'>استكشف الأقسام</div>", unsafe_allow_html=True)
 
-        # ===== بطاقات الأقسام (مصغّرة) =====
-        cols_per_row = 4
-        for i in range(0, len(categories), cols_per_row):
-            row_cats = categories[i:i + cols_per_row]
-            c_cols = st.columns(len(row_cats))
-            for j, cat in enumerate(row_cats):
-                c_name = cat["name"]
-                c_img = cat["image"]
-                is_sel = (st.session_state.selected_category == c_name)
-                sel_class = "kg-sel" if is_sel else ""
+            # ===== بطاقات الأقسام (مصغّرة) =====
+            cols_per_row = 4
+            for i in range(0, len(categories), cols_per_row):
+                row_cats = categories[i:i + cols_per_row]
+                c_cols = st.columns(len(row_cats))
+                for j, cat in enumerate(row_cats):
+                    c_name = cat["name"]
+                    c_img = cat["image"]
+                    is_sel = (st.session_state.selected_category == c_name)
+                    sel_class = "kg-sel" if is_sel else ""
 
-                with c_cols[j]:
-                    st.markdown(
-                        f"""
-                        <div class="kg-cat-card {sel_class}">
-                            <img src="{c_img}">
-                            <div class="kg-cat-name">{c_name}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    btn_label = f"✓ {c_name}" if is_sel else f"عرض {c_name}"
-                    if st.button(btn_label, key=f"cat_card_{i+j}", use_container_width=False):
-                        st.session_state.selected_category = c_name
-                        st.query_params["cat"] = c_name
-                        st.session_state.search_query = ""
-                        st.session_state.search_input_key += 1
-                        st.rerun()
+                    with c_cols[j]:
+                        st.markdown(
+                            f"""
+                            <div class="kg-cat-card {sel_class}">
+                                <img src="{c_img}">
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        # اسم القسم فقط (بدون أي مربع أو إطار)
+                        btn_label = c_name
+                        if st.button(btn_label, key=(f"cat_card_sel_{i+j}" if is_sel else f"cat_card_{i+j}"), use_container_width=False):
+                            st.session_state.selected_category = c_name
+                            st.query_params["cat"] = c_name
+                            st.session_state.search_query = ""
+                            st.session_state.search_input_key += 1
+                            st.rerun()
 
-        popular = load_popular_merchants()
-        if popular:
-            st.markdown("<div class='kg-section-title'>🔥 الأكثر طلبًا</div>", unsafe_allow_html=True)
-            popular_cols = st.columns(min(3, len(popular)))
-            for pi, (popular_store, order_count) in enumerate(popular):
-                with popular_cols[pi % len(popular_cols)]:
-                    popular_name = str(popular_store.get("name") or "متجر")
-                    st.markdown("<div class='kg-store-card' style='padding:10px; margin-bottom:8px;'>", unsafe_allow_html=True)
-                    display_image(popular_store.get("image_data"), width=62, fallback="🏬")
-                    st.markdown(f"<div style='font-size:14px; font-weight:900;'>{html.escape(popular_name)}</div>", unsafe_allow_html=True)
-                    st.caption(f"🔥 ضمن اختيارات الزبائن ({order_count} طلب)")
-                    if st.button("تصفح المتجر", key=f"popular_store_{pi}", use_container_width=True):
-                        st.session_state.selected_merchant = popular_name
-                        st.session_state.store_q = ""
-                        st.session_state.store_page = 0
-                        st.rerun()
+            render_home_offers()
+
+            popular = load_popular_merchants()
+            if popular:
+                st.markdown("<div class='kg-section-title'>🔥 الأكثر طلبًا</div>", unsafe_allow_html=True)
+                popular_cols = st.columns(min(3, len(popular)))
+                for pi, (popular_store, order_count) in enumerate(popular):
+                    with popular_cols[pi % len(popular_cols)]:
+                        render_store_card(popular_store, f"pop_{pi}", "", orders=order_count)
 
         left, right = st.columns([2.2, 1], gap="large")
 
         with left:
-            st.markdown("<div class='kg-section-title'>المتاجر القريبة منك</div>", unsafe_allow_html=True)
-
-            if st.session_state.selected_category == "الكل":
+            if st.session_state.selected_category == "الكل" or current_search:
                 filtered_merchants = all_merchants
             else:
                 selected_cat = st.session_state.selected_category.strip()
@@ -1392,6 +1592,14 @@ if st.session_state.nav_tab == "الرئيسية":
             else:
                 merchants = filtered_merchants
 
+            _cat_now = st.session_state.selected_category
+            _cat_txt = (f" — نتائج «{html.escape(current_search)}»" if current_search else ("" if _cat_now == "الكل" else f" — {html.escape(str(_cat_now))}"))
+            st.markdown(
+                f"<div class='kg-section-title'>المتاجر القريبة منك{_cat_txt}"
+                f"<span class='kg-section-count'>({len(merchants)})</span></div>",
+                unsafe_allow_html=True,
+            )
+
             if not merchants:
                 st.info("لا توجد متاجر مطابقة للبحث أو مضافة حالياً في هذا القسم.")
 
@@ -1400,34 +1608,8 @@ if st.session_state.nav_tab == "الرئيسية":
                 row_stores = merchants[mi:mi + store_cols_count]
                 s_cols = st.columns(len(row_stores))
                 for sj, store in enumerate(row_stores):
-                    sname = store.get("name", "متجر")
-                    scat = store.get("category", "")
-                    sloc = store.get("location", "")
-                    badge = html.escape(merchant_badge(store))
-                    eta = html.escape(merchant_eta(store))
-                    fee_value = store.get("delivery_fee")
-                    fee_text = f"من {safe_price(fee_value):.2f} د.أ" if fee_value is not None else "تحسب حسب الموقع"
-
                     with s_cols[sj]:
-                        st.markdown('<div class="kg-store-card">', unsafe_allow_html=True)
-                        display_image(store.get("image_data"), width=90, fallback="🏬")
-                        st.markdown(f"<div style='font-size:18px; font-weight:900; margin:10px 0 4px 0;'>{html.escape(str(sname))}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<span class='kg-store-badge'>✓ {badge}</span>", unsafe_allow_html=True)
-                        st.markdown(
-                            f"<div class='kg-store-meta'>📍 {html.escape(str(scat))} • {html.escape(str(sloc))}<br>"
-                            f"🚚 وقت تقديري: <b>{eta}</b> • رسوم التوصيل: <b>{fee_text}</b></div>",
-                            unsafe_allow_html=True,
-                        )
-
-                        # ===== تقييم المتجر =====
-                        render_rating(store)
-
-                        if st.button(f"🛒 تصفح أصناف {sname}", key=f"enter_store_{mi+sj}", use_container_width=True):
-                            st.session_state.selected_merchant = sname
-                            st.session_state.store_q = current_search if current_search else ""
-                            st.session_state.store_page = 0
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        render_store_card(store, f"m_{mi + sj}", current_search)
 
         with right:
             render_cart("main")
@@ -1572,22 +1754,6 @@ elif st.session_state.nav_tab == "الحساب":
                 pass
             st.rerun()
 
-    with st.expander("🔐 تغيير رمز PIN"):
-        with st.form("pin_change_form"):
-            old_pin = st.text_input("PIN الحالي", type="password", max_chars=4)
-            new_pin = st.text_input("PIN الجديد (4 أرقام)", type="password", max_chars=4)
-            go_pin = st.form_submit_button("تغيير PIN")
-        if go_pin:
-            row = find_by_phone(sb, "customers", st.session_state.phone)
-            ok, msg = check_pin(sb, "customers", row, old_pin) if row else (False, "الحساب غير موجود")
-            if not ok:
-                st.error(msg if msg != NO_PIN else "لا يوجد PIN حالي.")
-            elif not valid_pin(new_pin):
-                st.error("PIN الجديد يجب أن يكون 4 أرقام.")
-            else:
-                set_pin(sb, "customers", row["id"], row["phone"], new_pin)
-                st.success("تم تغيير PIN بنجاح.")
-
     col_b1, col_b2 = st.columns(2)
     with col_b1:
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
@@ -1599,15 +1765,15 @@ elif st.session_state.nav_tab == "الحساب":
             st.rerun()
     with col_b2:
         with st.expander("🗑 حذف حسابي نهائيًا"):
-            del_pin = st.text_input("أدخل PIN لتأكيد الحذف", type="password", max_chars=4, key="del_pin")
+            confirm = st.text_input("اكتب كلمة «حذف» لتأكيد الحذف", key="del_confirm")
             if st.button("حذف الحساب نهائيًا", use_container_width=True):
-                row = find_by_phone(sb, "customers", st.session_state.phone)
-                ok, msg = check_pin(sb, "customers", row, del_pin) if row else (False, "الحساب غير موجود")
-                if ok:
-                    sb.table("customers").delete().eq("id", row["id"]).execute()
+                if confirm.strip() != "حذف":
+                    st.error("اكتب كلمة «حذف» للتأكيد.")
+                else:
+                    row = find_by_phone(sb, "customers", st.session_state.phone)
+                    if row:
+                        sb.table("customers").delete().eq("id", row["id"]).execute()
                     for k in ("logged_in", "customer_id", "phone", "customer_name", "customer_email", "customer_address",
                               "delivery_notes", "customer_map_link", "cart", "last_order"):
                         st.session_state.pop(k, None)
                     st.rerun()
-                else:
-                    st.error("رمز PIN غير صحيح.")
