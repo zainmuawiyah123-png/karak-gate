@@ -426,13 +426,26 @@ div[data-testid="column"]:has(.kg-cat-card) .stButton > button p {
     font-weight: 800 !important;
     color: inherit !important;
     margin: 0 !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
 }
 div[data-testid="column"]:has(.kg-cat-card.kg-sel) .stButton > button {
     color: #FF5722 !important;
 }
+
+/* ============ شبكة الأقسام: 4 في الصف حتى على الهاتف (نمط طلبات) ============ */
+div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) { flex-wrap: nowrap !important; gap: 8px !important; margin-bottom: 8px; }
+div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) > div {
+    min-width: 0 !important; width: auto !important; flex: 1 1 0 !important;
+    background: #FBF3EA; border-radius: 16px; padding: 10px 2px 8px;
+}
+div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) > div:has(.kg-cat-card.kg-sel) { background: #FFEFE5; box-shadow: inset 0 0 0 2px #FF5722; }
+div[data-testid="stHorizontalBlock"] .kg-cat-card img {
+    width: 58px !important; height: 58px !important; border-radius: 16px !important;
+    border: 0 !important; box-shadow: none !important; background: transparent !important; margin-bottom: 4px;
+}
+div[data-testid="stHorizontalBlock"]:has(.kg-cat-card) > div > div { gap: 2px !important; }
+div[class*="st-key-cat_card_"] button p { min-height: 28px; display: flex; align-items: center; justify-content: center; }
 
 /* ============ اسم القسم تحت الصورة (بالوسط، بدون إطار) ============ */
 div[class*="st-key-cat_card_"] { width: 100% !important; display: flex !important; justify-content: center !important; }
