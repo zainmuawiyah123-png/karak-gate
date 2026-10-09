@@ -3,7 +3,7 @@
   "name": "karak gate",
   "icons": [
     {
-      "src": "kark.png",
+      "src": "/kark.png",
       "type": "image/png",
       "sizes": "512x512"
     }
