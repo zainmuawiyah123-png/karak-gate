@@ -1,9 +1,7 @@
 streamlit
 supabase
 streamlit-autorefresh
+streamlit-cookies-controller
 requests
-pywebpush
-cryptography
-openpyxl
-Pillow
-
+folium
+streamlit-folium
