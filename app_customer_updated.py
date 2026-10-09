@@ -769,6 +769,8 @@ def restore_customer_session():
     if st.session_state.get("logged_in") or not cookie_controller:
         return
     try:
+        # يحدّث نسخة الكوكيز من المتصفح بعد إعادة فتح الصفحة.
+        cookie_controller.refresh()
         token = cookie_controller.get("halago_customer_session")
         if not token or "." not in str(token):
             return
