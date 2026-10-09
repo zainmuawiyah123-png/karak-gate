@@ -101,8 +101,8 @@ def _setting_value(name):
 
 def telegram_send(text):
     """إرسال إشعار تيليجرام وإرجاع (نجح، رسالة تشخيصية)."""
-    token = _setting_value("TELEGRAM_BOT_TOKEN")
-    chat_id = _setting_value("TELEGRAM_CHAT_ID")
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or _setting_value("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID") or _setting_value("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         return False, "لم يتم ضبط TELEGRAM_BOT_TOKEN أو TELEGRAM_CHAT_ID في Render."
     try:
