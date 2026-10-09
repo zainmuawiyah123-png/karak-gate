@@ -7,6 +7,11 @@ import base64
 import html
 from datetime import datetime
 import streamlit as st
+st.set_page_config(
+    page_title="Halago",
+    page_icon="kark.png",
+    layout="wide"
+)
 from supabase import create_client
 
 APP_NAME = "Halago"
