@@ -9,7 +9,7 @@ from datetime import datetime
 import streamlit as st
 st.set_page_config(
     page_title="Halago",
-    page_icon="kark.png",
+    page_icon="https://raw.githubusercontent.com/zainmuawiyah123-png/karak-gate/main/kark.png",
     layout="wide"
 )
 from supabase import create_client
