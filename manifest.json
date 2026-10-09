@@ -1,16 +1,20 @@
 {
-  "short_name": "Streamkaraj gate",
-  "name": "karak gate",
+  "short_name": "Halago",
+  "name": "Halago Orders",
   "icons": [
     {
-      "src": "/kark.png",
+      "src": "https://raw.githubusercontent.com/zainmuawiyah123-png/karak-gate/main/kark.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/zainmuawiyah123-png/karak-gate/main/kark.png",
       "type": "image/png",
       "sizes": "512x512"
     }
   ],
   "start_url": "/",
-  "display": "standalone",
+  "background_color": "#ffffff",
   "theme_color": "#ffffff",
-  "background_color": "#ffffff"
+  "display": "standalone"
 }
-  https://github.com/zainmuawiyah123-png/karak-gate/blob/main/kark.png
