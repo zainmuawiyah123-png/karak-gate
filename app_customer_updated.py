@@ -9,21 +9,8 @@ from datetime import datetime
 import streamlit as st
 st.set_page_config(
     page_title="Halago",
-    page_icon="kark.png",
+    page_icon="karak_castle.png",
     layout="wide"
-)
-
-# الرابط المباشر من مستودعك ليقرأه الأيفون والمتصفح فوراً بدون أخطاء
-ICON_URL = "https://raw.githubusercontent.com/zainmuawiyah123-png/karak-gate/main/kark.png"
-
-st.markdown(
-    f"""
-    <head>
-        <link rel="apple-touch-icon" href="{ICON_URL}">
-        <link rel="icon" type="image/png" href="{ICON_URL}">
-    </head>
-    """,
-    unsafe_allow_html=True
 )
 from supabase import create_client
 
