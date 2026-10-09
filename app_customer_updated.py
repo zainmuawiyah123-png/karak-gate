@@ -158,7 +158,9 @@ st.set_page_config(
 cookie_controller = None
 if COOKIE_CONTROLLER_OK:
     try:
-        cookie_controller = CookieController()
+        if "cookie_controller" not in st.session_state:
+            st.session_state["cookie_controller"] = CookieController()
+        cookie_controller = st.session_state["cookie_controller"]
     except Exception:
         cookie_controller = None
 
@@ -688,13 +690,15 @@ def legacy_split(address):
 
 
 def login_session(row):
-    addr, notes, link = row.get("address") or "", row.get("delivery_notes") or "", row.get("map_link") or ""
+    addr = row.get("address") or row.get("customer_address") or ""
+    notes = row.get("delivery_notes") or row.get("notes") or ""
+    link = row.get("map_link") or row.get("customer_map_link") or ""
     if "رابط الخريطة:" in addr or "(ملاحظات:" in addr:
         l_addr, l_notes, l_link = legacy_split(addr)
         addr, notes, link = l_addr, notes or l_notes, link or l_link
     st.session_state.update({
         "logged_in": True, "customer_id": row.get("id"), "phone": row.get("phone") or "",
-        "customer_name": row.get("name") or "", "customer_address": addr,
+        "customer_name": row.get("name") or row.get("customer_name") or "", "customer_address": addr,
         "delivery_notes": notes, "customer_map_link": link, "customer_email": row.get("email") or "",
     })
 
