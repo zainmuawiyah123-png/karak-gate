@@ -12,6 +12,17 @@ st.set_page_config(
     page_icon="karak_castle.png",
     layout="wide"
 )
+
+st.markdown(
+    """
+    <head>
+        <link rel="apple-touch-icon" sizes="180x180" href="/karak_castle.png">
+        <link rel="icon" type="image/png" href="/karak_castle.png">
+        <link rel="manifest" href="/manifest.json">
+    </head>
+    """,
+    unsafe_allow_html=True
+)
 from supabase import create_client
 
 APP_NAME = "Halago"
