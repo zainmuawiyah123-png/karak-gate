@@ -1139,19 +1139,35 @@ def render_cart(prefix):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ============================================================
-# الأقسام
-# ============================================================
+# =====================================
+# الأقسام الرئيسية
+# =====================================
 categories = [
-    {"name": "الكل", "image": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=300&q=80"},
-    {"name": "مطاعم", "image": "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=300&q=80"},
-    {"name": "حلويات", "image": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=300&q=80"},
-    {"name": "ماركت", "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80"},
-    {"name": "محامص ومكسرات", "image": "https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=300&q=80"},
-    {"name": "خضروات وفواكه", "image": "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&q=80"},
-    {"name": "لحوم", "image": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?auto=format&fit=crop&w=300&q=80"},
-    {"name": "صيدليات ومستلزمات طبيه", "image": "https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=300&q=80"}
+    {"name": "الكل", "image": "https://images.unsplash.com/photo-1504674900247-0877df9cc836"},
+    {"name": "مطاعم", "image": "https://images.unsplash.com/photo-1515003197210-e0cd71810b43"},
+    {"name": "حلويات", "image": "https://images.unsplash.com/photo-1578985545062-a998db3c185b"},
+    {"name": "ماركت", "image": "https://images.unsplash.com/photo-1542838132-92d533cb2362"},
+    {"name": "محامص ومكسرات", "image": "https://images.unsplash.com/photo-1599599104021-18f7f48d46e0"},
+    {"name": "خضروات وفواكه", "image": "https://images.unsplash.com/photo-1619566636858-adf30464a1ee"},
+    {"name": "لحوم", "image": "https://images.unsplash.com/photo-1603048297172-2aa3192b1e8b"},
+    {"name": "صيدليات ومستلزمات طبية", "image": "https://images.unsplash.com/photo-1584515979246-50b15e62fec8"},
 ]
+
+col_count = len(categories)
+num_columns = 4
+num_rows = (col_count + num_columns - 1) // num_columns
+
+for r in range(num_rows):
+    cols = st.columns(num_columns)
+    for c in range(num_columns):
+        index = r * num_columns + c
+        if index < col_count:
+            with cols[c]:
+                cat_data = categories[index]
+                st.image(cat_data["image"], caption=cat_data["name"], use_column_width=True)
+                if st.button("اختر", key=f"cat_img_btn_{index}"):
+                    st.session_state.selected_merchant = cat_data["name"]
+                    st.session_state.nav_tab = cat_data["name"]
 
 
 # ============================================================
