@@ -71,6 +71,15 @@ except Exception:
     CookieController = None
     COOKIE_CONTROLLER_OK = False
 
+try:
+    import folium
+    from streamlit_folium import st_folium
+    MAP_PICKER_OK = True
+except Exception:
+    folium = None
+    st_folium = None
+    MAP_PICKER_OK = False
+
 
 def push_ready():
     try:
@@ -560,6 +569,41 @@ def customer_map_coords(link):
         except Exception:
             pass
     return coords_from_customer_link(link)
+
+
+def render_customer_location_picker():
+    """خريطة يضغط عليها العميل لتحديد موقع التسليم وحفظه كرابط Google Maps."""
+    if not MAP_PICKER_OK:
+        st.warning("خريطة تحديد الموقع تحتاج تثبيت folium و streamlit-folium من requirements.txt.")
+        return
+    current = customer_map_coords(st.session_state.customer_map_link)
+    center = list(current) if current else [31.1818, 35.7011]
+    fmap = folium.Map(location=center, zoom_start=15 if current else 12, control_scale=True)
+    if current:
+        folium.Marker(
+            location=list(current),
+            tooltip="موقع التسليم المحفوظ",
+            popup="موقع الزبون",
+            icon=folium.Icon(color="red", icon="home"),
+        ).add_to(fmap)
+    result = st_folium(fmap, height=300, width=None, key="customer_location_picker", returned_objects=["last_clicked"])
+    clicked = (result or {}).get("last_clicked") or {}
+    if clicked.get("lat") is not None and clicked.get("lng") is not None:
+        lat, lng = float(clicked["lat"]), float(clicked["lng"])
+        st.session_state["pending_customer_location"] = (lat, lng)
+    pending = st.session_state.get("pending_customer_location")
+    if pending:
+        lat, lng = pending
+        st.success(f"تم تحديد الموقع: {lat:.6f}, {lng:.6f}")
+        if st.button("📍 حفظ الموقع المحدد", key="save_picked_location", use_container_width=True):
+            st.session_state.customer_map_link = f"https://maps.google.com/?q={lat:.7f},{lng:.7f}"
+            try:
+                sb.table("customers").update(customer_payload(st.session_state.phone)).eq("id", st.session_state.customer_id).execute()
+                st.session_state.pop("pending_customer_location", None)
+                st.success("✅ تم حفظ موقع التسليم بنجاح.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"تعذر حفظ الموقع: {exc}")
 
 
 def merchant_badge(merchant):
@@ -1479,13 +1523,17 @@ elif st.session_state.nav_tab == "الحساب":
 
     st.info(f"📞 رقم الهاتف: {st.session_state.phone}  (لتغيير الرقم أنشئ حسابًا جديدًا)")
 
+    st.markdown("### 📍 حدّد موقع التسليم على الخريطة")
+    st.caption("اضغط على مكان منزلك في الخريطة ثم اضغط «حفظ الموقع المحدد». لا تحتاج إلى كتابة الإحداثيات.")
+    render_customer_location_picker()
+
     with st.form("account_form"):
         a_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
         a_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
         a_addr = st.text_area("عنوان التوصيل (المنطقة، الشارع، أقرب معلم):", value=st.session_state.customer_address)
         a_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
-        st.markdown("📍 **الموقع الجغرافي (رابط خرائط جوجل):**")
-        a_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+        st.markdown("📍 **الموقع الجغرافي:**")
+        a_link = st.text_input("رابط الموقع (يُملأ تلقائيًا بعد اختيار الخريطة):", value=st.session_state.customer_map_link)
         save_btn = st.form_submit_button("💾 حفظ وتحديث البيانات", use_container_width=True)
 
     if save_btn:
