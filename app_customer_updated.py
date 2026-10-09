@@ -33,6 +33,8 @@ import io
 import re
 import time
 import base64
+import hashlib
+import hmac
 import json
 import urllib.error
 import urllib.parse
@@ -61,6 +63,22 @@ except Exception:
     PUSH_IMPORT_OK = False
 
 from auth_pin import (valid_pin, valid_phone, norm_phone, set_pin, find_by_phone, check_pin, NO_PIN)
+
+try:
+    from streamlit_cookies_controller import CookieController
+    COOKIE_CONTROLLER_OK = True
+except Exception:
+    CookieController = None
+    COOKIE_CONTROLLER_OK = False
+
+try:
+    import folium
+    from streamlit_folium import st_folium
+    MAP_PICKER_OK = True
+except Exception:
+    folium = None
+    st_folium = None
+    MAP_PICKER_OK = False
 
 
 def push_ready():
@@ -145,6 +163,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+cookie_controller = None
+if COOKIE_CONTROLLER_OK:
+    try:
+        if "cookie_controller" not in st.session_state:
+            st.session_state["cookie_controller"] = CookieController()
+        cookie_controller = st.session_state["cookie_controller"]
+    except Exception:
+        cookie_controller = None
 
 
 # ============================================================
@@ -309,6 +336,9 @@ div[data-testid="column"] .stButton > button {
     text-align: center;
     margin: 0 auto 3px;
     height: 70px;
+    width: 76px;
+    max-width: 76px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -378,7 +408,7 @@ div[data-testid="column"]:has(.kg-cat-card) div[data-testid="stButton"] > div {
 @media (max-width: 640px) {
     .block-container { padding-left: .75rem !important; padding-right: .75rem !important; }
     .kg-header { margin-left:-12px; margin-right:-12px; }
-    .kg-cat-card { height:67px; padding:1px; border-radius:10px; margin-bottom:2px; }
+    .kg-cat-card { height:67px; width:72px; max-width:72px; padding:1px; border-radius:10px; margin:0 auto 2px; }
     .kg-cat-card img { width:44px !important; height:44px !important; margin-bottom:1px; }
     .kg-cat-card .kg-cat-name { font-size:11px; }
     .kg-promo { height:52px; border-radius:13px; }
@@ -399,7 +429,7 @@ if not st.session_state.get("splash_done"):
         """
         <div style="position:fixed; inset:0; z-index:999999; display:flex; flex-direction:column;
                     align-items:center; justify-content:center; text-align:center;
-                    background:linear-gradient(135deg,#0B3D91 0%,#1565C0 100%);">
+                    background:linear-gradient(135deg,#E94B10 0%,#FF7A21 100%);">
             <div style="font-size:84px; animation:kgfade .8s ease both;">🛒</div>
             <div style="font-size:44px; font-weight:900; color:#FFD700 !important; animation:kgfade 1s ease both; letter-spacing:1px;">Halago</div>
             <div style="font-size:15px; color:#FFFFFF !important; opacity:.9; margin-top:6px;">هلا بك... اطلب براحة</div>
@@ -475,7 +505,7 @@ for _k, _v in {
     "logged_in": False, "customer_id": None,
     "phone": "", "customer_name": "", "customer_email": "",
     "customer_address": "", "delivery_notes": "", "customer_map_link": "",
-    "cart": [], "coupon_code": "", "nav_tab": "الرئيسية", "search_query": "", "search_input_key": 0,
+    "cart": [], "coupon_code": "", "remember_me": False, "nav_tab": "الرئيسية", "search_query": "", "search_input_key": 0,
     "selected_merchant": None, "store_q": "", "store_page": 0, "last_order": None,
 }.items():
     if _k not in st.session_state:
@@ -539,6 +569,41 @@ def customer_map_coords(link):
         except Exception:
             pass
     return coords_from_customer_link(link)
+
+
+def render_customer_location_picker():
+    """خريطة يضغط عليها العميل لتحديد موقع التسليم وحفظه كرابط Google Maps."""
+    if not MAP_PICKER_OK:
+        st.warning("خريطة تحديد الموقع تحتاج تثبيت folium و streamlit-folium من requirements.txt.")
+        return
+    current = customer_map_coords(st.session_state.customer_map_link)
+    center = list(current) if current else [31.1818, 35.7011]
+    fmap = folium.Map(location=center, zoom_start=15 if current else 12, control_scale=True)
+    if current:
+        folium.Marker(
+            location=list(current),
+            tooltip="موقع التسليم المحفوظ",
+            popup="موقع الزبون",
+            icon=folium.Icon(color="red", icon="home"),
+        ).add_to(fmap)
+    result = st_folium(fmap, height=300, width=None, key="customer_location_picker", returned_objects=["last_clicked"])
+    clicked = (result or {}).get("last_clicked") or {}
+    if clicked.get("lat") is not None and clicked.get("lng") is not None:
+        lat, lng = float(clicked["lat"]), float(clicked["lng"])
+        st.session_state["pending_customer_location"] = (lat, lng)
+    pending = st.session_state.get("pending_customer_location")
+    if pending:
+        lat, lng = pending
+        st.success(f"تم تحديد الموقع: {lat:.6f}, {lng:.6f}")
+        if st.button("📍 حفظ الموقع المحدد", key="save_picked_location", use_container_width=True):
+            st.session_state.customer_map_link = f"https://maps.google.com/?q={lat:.7f},{lng:.7f}"
+            try:
+                sb.table("customers").update(customer_payload(st.session_state.phone)).eq("id", st.session_state.customer_id).execute()
+                st.session_state.pop("pending_customer_location", None)
+                st.success("✅ تم حفظ موقع التسليم بنجاح.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"تعذر حفظ الموقع: {exc}")
 
 
 def merchant_badge(merchant):
@@ -669,15 +734,67 @@ def legacy_split(address):
 
 
 def login_session(row):
-    addr, notes, link = row.get("address") or "", row.get("delivery_notes") or "", row.get("map_link") or ""
+    addr = row.get("address") or row.get("customer_address") or ""
+    notes = row.get("delivery_notes") or row.get("notes") or ""
+    link = row.get("map_link") or row.get("customer_map_link") or ""
     if "رابط الخريطة:" in addr or "(ملاحظات:" in addr:
         l_addr, l_notes, l_link = legacy_split(addr)
         addr, notes, link = l_addr, notes or l_notes, link or l_link
     st.session_state.update({
         "logged_in": True, "customer_id": row.get("id"), "phone": row.get("phone") or "",
-        "customer_name": row.get("name") or "", "customer_address": addr,
+        "customer_name": row.get("name") or row.get("customer_name") or "", "customer_address": addr,
         "delivery_notes": notes, "customer_map_link": link, "customer_email": row.get("email") or "",
     })
+
+
+def _session_secret():
+    return _setting_value("APP_SESSION_SECRET") or SUPABASE_ANON_KEY
+
+
+def remember_customer(phone):
+    """يحفظ رمز جلسة موقّعًا، وليس رقم PIN، في متصفح العميل."""
+    if not cookie_controller:
+        return
+    try:
+        expires = int(time.time()) + 30 * 24 * 60 * 60
+        payload = f"{norm_phone(phone)}|{expires}"
+        signature = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+        token = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=") + "." + signature
+        cookie_controller.set("halago_customer_session", token, max_age=30 * 24 * 60 * 60)
+    except Exception:
+        pass
+
+
+def restore_customer_session():
+    if st.session_state.get("logged_in") or not cookie_controller:
+        return
+    try:
+        # يحدّث نسخة الكوكيز من المتصفح بعد إعادة فتح الصفحة.
+        cookie_controller.refresh()
+        token = cookie_controller.get("halago_customer_session")
+        if not token or "." not in str(token):
+            return
+        encoded, signature = str(token).rsplit(".", 1)
+        padded = encoded + "=" * (-len(encoded) % 4)
+        payload = base64.urlsafe_b64decode(padded).decode()
+        phone, expires_text = payload.split("|", 1)
+        expected = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected) or int(expires_text) < int(time.time()):
+            return
+        row = find_by_phone(sb, "customers", phone)
+        if row:
+            login_session(row)
+            st.session_state["remember_me"] = True
+    except Exception:
+        return
+
+
+def forget_customer_session():
+    if cookie_controller:
+        try:
+            cookie_controller.remove("halago_customer_session")
+        except Exception:
+            pass
 
 
 def customer_payload(phone):
@@ -710,6 +827,7 @@ def render_auth():
         with st.form("login_form"):
             phone = st.text_input("رقم الهاتف (مثال: 0797123456)")
             pin = st.text_input("رمز PIN (4 أرقام)", type="password", max_chars=4)
+            remember_me = st.checkbox("تذكرني لمدة 30 يومًا على هذا الجهاز", value=True)
             go = st.form_submit_button("دخول", use_container_width=True)
         if go:
             if not valid_phone(phone) or not valid_pin(pin):
@@ -722,6 +840,9 @@ def render_auth():
                     ok, msg = check_pin(sb, "customers", row, pin)
                     if ok:
                         login_session(row)
+                        st.session_state.remember_me = remember_me
+                        if remember_me:
+                            remember_customer(row.get("phone") or phone)
                         st.rerun()
                     elif msg == NO_PIN:
                         st.warning("حسابك قديم بلا رمز PIN. اختر «حساب جديد» بنفس الرقم لتعيين رمز PIN وتحديث بياناتك.")
@@ -767,10 +888,14 @@ def render_auth():
                             rid = (sb.table("customers").insert(pl).execute().data or [{}])[0].get("id")
                         set_pin(sb, "customers", rid, np_, pin)
                         login_session(find_by_phone(sb, "customers", np_))
+                        st.session_state.remember_me = True
+                        remember_customer(np_)
                         st.rerun()
                     except Exception as e:
                         st.error(f"تعذر إنشاء الحساب: {e}")
 
+
+restore_customer_session()
 
 if not st.session_state.logged_in:
     render_auth()
@@ -1099,6 +1224,9 @@ if st.session_state.nav_tab == "الرئيسية":
             st.session_state.selected_merchant = None
             st.session_state.store_q = ""
             st.session_state.store_page = 0
+            st.session_state.search_query = ""
+            st.session_state.selected_category = "الكل"
+            st.session_state.search_input_key += 1
             st.rerun()
 
         left_m, right_m = st.columns([2.2, 1], gap="large")
@@ -1185,25 +1313,9 @@ if st.session_state.nav_tab == "الرئيسية":
             key=f"user_search_box_{st.session_state.search_input_key}"
         )
 
-        if user_input != st.session_state.search_query:
-            st.session_state.search_query = user_input
-
-        popular = load_popular_merchants()
-        if popular:
-            st.markdown("<div class='kg-section-title'>🔥 الأكثر طلبًا</div>", unsafe_allow_html=True)
-            popular_cols = st.columns(min(3, len(popular)))
-            for pi, (popular_store, order_count) in enumerate(popular):
-                with popular_cols[pi % len(popular_cols)]:
-                    popular_name = str(popular_store.get("name") or "متجر")
-                    st.markdown("<div class='kg-store-card' style='padding:10px; margin-bottom:8px;'>", unsafe_allow_html=True)
-                    display_image(popular_store.get("image_data"), width=62, fallback="🏬")
-                    st.markdown(f"<div style='font-size:14px; font-weight:900;'>{html.escape(popular_name)}</div>", unsafe_allow_html=True)
-                    st.caption(f"🔥 ضمن اختيارات الزبائن ({order_count} طلب)")
-                    if st.button("تصفح المتجر", key=f"popular_store_{pi}", use_container_width=True):
-                        st.session_state.selected_merchant = popular_name
-                        st.session_state.store_q = ""
-                        st.session_state.store_page = 0
-                        st.rerun()
+        current_search = user_input.strip()
+        if current_search != st.session_state.search_query:
+            st.session_state.search_query = current_search
 
         st.markdown("<div class='kg-section-title'>استكشف الأقسام</div>", unsafe_allow_html=True)
 
@@ -1236,6 +1348,23 @@ if st.session_state.nav_tab == "الرئيسية":
                         st.session_state.search_input_key += 1
                         st.rerun()
 
+        popular = load_popular_merchants()
+        if popular:
+            st.markdown("<div class='kg-section-title'>🔥 الأكثر طلبًا</div>", unsafe_allow_html=True)
+            popular_cols = st.columns(min(3, len(popular)))
+            for pi, (popular_store, order_count) in enumerate(popular):
+                with popular_cols[pi % len(popular_cols)]:
+                    popular_name = str(popular_store.get("name") or "متجر")
+                    st.markdown("<div class='kg-store-card' style='padding:10px; margin-bottom:8px;'>", unsafe_allow_html=True)
+                    display_image(popular_store.get("image_data"), width=62, fallback="🏬")
+                    st.markdown(f"<div style='font-size:14px; font-weight:900;'>{html.escape(popular_name)}</div>", unsafe_allow_html=True)
+                    st.caption(f"🔥 ضمن اختيارات الزبائن ({order_count} طلب)")
+                    if st.button("تصفح المتجر", key=f"popular_store_{pi}", use_container_width=True):
+                        st.session_state.selected_merchant = popular_name
+                        st.session_state.store_q = ""
+                        st.session_state.store_page = 0
+                        st.rerun()
+
         left, right = st.columns([2.2, 1], gap="large")
 
         with left:
@@ -1250,7 +1379,6 @@ if st.session_state.nav_tab == "الرئيسية":
                     if str(m.get("category", "")).strip() == selected_cat
                 ]
 
-            current_search = st.session_state.search_query.strip()
             if current_search:
                 s = current_search.lower()
                 matching_merchants_by_product = merchants_with_product(current_search)
@@ -1397,13 +1525,17 @@ elif st.session_state.nav_tab == "الحساب":
 
     st.info(f"📞 رقم الهاتف: {st.session_state.phone}  (لتغيير الرقم أنشئ حسابًا جديدًا)")
 
+    st.markdown("### 📍 حدّد موقع التسليم على الخريطة")
+    st.caption("اضغط على مكان منزلك في الخريطة ثم اضغط «حفظ الموقع المحدد». لا تحتاج إلى كتابة الإحداثيات.")
+    render_customer_location_picker()
+
     with st.form("account_form"):
         a_name = st.text_input("اسمك الكريم:", value=st.session_state.customer_name)
         a_email = st.text_input("البريد الإلكتروني (اختياري):", value=st.session_state.customer_email)
         a_addr = st.text_area("عنوان التوصيل (المنطقة، الشارع، أقرب معلم):", value=st.session_state.customer_address)
         a_notes = st.text_area("ملاحظات خاصة لمندوب التوصيل:", value=st.session_state.delivery_notes)
-        st.markdown("📍 **الموقع الجغرافي (رابط خرائط جوجل):**")
-        a_link = st.text_input("رابط موقعك على خرائط جوجل (Google Maps URL):", value=st.session_state.customer_map_link)
+        st.markdown("📍 **الموقع الجغرافي:**")
+        a_link = st.text_input("رابط الموقع (يُملأ تلقائيًا بعد اختيار الخريطة):", value=st.session_state.customer_map_link)
         save_btn = st.form_submit_button("💾 حفظ وتحديث البيانات", use_container_width=True)
 
     if save_btn:
@@ -1459,6 +1591,7 @@ elif st.session_state.nav_tab == "الحساب":
     col_b1, col_b2 = st.columns(2)
     with col_b1:
         if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            forget_customer_session()
             for k in ("logged_in", "customer_id", "phone", "customer_name", "customer_email", "customer_address",
                       "delivery_notes", "customer_map_link", "cart", "last_order"):
                 st.session_state.pop(k, None)
