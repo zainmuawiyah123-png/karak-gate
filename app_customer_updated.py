@@ -7,11 +7,6 @@ import base64
 import html
 from datetime import datetime
 import streamlit as st
-st.set_page_config(
-    page_title="Halago",
-    page_icon="https://raw.githubusercontent.com/zainmuawiyah123-png/karak-gate/main/kark.png",
-    layout="wide"
-)
 from supabase import create_client
 
 APP_NAME = "Halago"
@@ -190,12 +185,53 @@ except Exception:
 # ============================================================
 # إعداد الصفحة — أول أمر Streamlit في الملف (مصحّح)
 # ============================================================
+_ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kark.png")
+_PAGE_ICON = "🛒"
+try:
+    from PIL import Image as _PILImage
+    if os.path.exists(_ICON_FILE):
+        _PAGE_ICON = _PILImage.open(_ICON_FILE)
+except Exception:
+    _PAGE_ICON = "🛒"
+
+
+def inject_app_icon():
+    """يضع أيقونة قلعة الكرك كأيقونة الشاشة الرئيسية (iOS/أندرويد) وأيقونة تبويب المتصفح."""
+    try:
+        if not os.path.exists(_ICON_FILE):
+            return
+        import streamlit.components.v1 as components
+        with open(_ICON_FILE, "rb") as f:
+            uri = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+        components.html(
+            """<script>
+            (function(){
+              try {
+                var d = window.parent.document, h = d.head, uri = "%s";
+                h.querySelectorAll('link[rel*="icon"]').forEach(function(l){ l.remove(); });
+                [["apple-touch-icon","180x180"],["icon","180x180"]].forEach(function(p){
+                  var l = d.createElement('link'); l.rel = p[0]; l.sizes = p[1]; l.type = 'image/png'; l.href = uri; h.appendChild(l);
+                });
+                function meta(n, c){ var m = d.querySelector('meta[name="'+n+'"]') || d.createElement('meta'); m.name = n; m.content = c; h.appendChild(m); }
+                meta('apple-mobile-web-app-title', 'Halago');
+                meta('apple-mobile-web-app-capable', 'yes');
+              } catch(e) {}
+            })();
+            </script>""" % uri,
+            height=0,
+        )
+    except Exception:
+        pass
+
+
 st.set_page_config(
     page_title="Halago",
-    page_icon="🛒",
+    page_icon=_PAGE_ICON,
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+inject_app_icon()
 
 cookie_controller = None
 if COOKIE_CONTROLLER_OK:
@@ -857,28 +893,124 @@ def display_image(value, width=100, fallback="🛒"):
 
 
 # ============================================================
-# التقييم اليدوي (نجوم من حقل rating في جدول merchants)
+# تقييم المتاجر من الزبائن (جدول merchant_ratings) مع الرجوع لحقل rating اليدوي
 # ============================================================
-def render_rating(merchant):
-    """يعرض نجوم التقييم أسفل المتجر، مع دعم أسماء الحقول الشائعة."""
+@st.cache_data(ttl=30, show_spinner=False)
+def load_rating_stats():
+    """{اسم المتجر: (المتوسط, عدد التقييمات)} من تقييمات الزبائن."""
     try:
-        raw_rating = (
-            merchant.get("rating")
-            if merchant.get("rating") is not None
-            else merchant.get("avg_rating", merchant.get("average_rating", 0))
-        )
-        rating = max(0.0, min(5.0, float(raw_rating or 0)))
+        rows = sb.table("merchant_ratings").select("merchant_name,stars").limit(10000).execute().data or []
     except Exception:
-        rating = 0.0
+        return {}
+    agg = {}
+    for r in rows:
+        n = str(r.get("merchant_name") or "").strip()
+        try:
+            s = int(r.get("stars") or 0)
+        except Exception:
+            continue
+        if n and 1 <= s <= 5:
+            a = agg.setdefault(n, [0, 0])
+            a[0] += s
+            a[1] += 1
+    return {n: (t / c, c) for n, (t, c) in agg.items()}
+
+
+def merchant_rating_value(merchant):
+    """(المتوسط, العدد): تقييمات الزبائن أولًا، وإلا الحقل اليدوي في merchants."""
+    stats = load_rating_stats().get(str(merchant.get("name")))
+    if stats:
+        return stats
+    try:
+        raw = merchant.get("rating") if merchant.get("rating") is not None else merchant.get("avg_rating", merchant.get("average_rating", 0))
+        return (max(0.0, min(5.0, float(raw or 0))), 0)
+    except Exception:
+        return (0.0, 0)
+
+
+def render_rating(merchant):
+    rating, count = merchant_rating_value(merchant)
     full = int(rating)
     half = 1 if (rating - full) >= 0.5 else 0
     empty = 5 - full - half
     stars = "★" * full + ("⯨" if half else "") + "☆" * empty
-    label = f"({rating:.1f})" if rating > 0 else "(لا يوجد تقييم بعد)"
+    if count:
+        label = f"({rating:.1f} • {count} تقييم من الزبائن)"
+    elif rating > 0:
+        label = f"({rating:.1f})"
+    else:
+        label = "(لا يوجد تقييم بعد)"
     st.markdown(
         f"<div class='kg-rating'><span class='kg-rating-stars'>{stars}</span> <span class='kg-rating-value'>{label}</span></div>",
         unsafe_allow_html=True
     )
+
+
+def render_store_reviews(mname):
+    """آخر تعليقات الزبائن على المتجر (إن وُجدت)."""
+    try:
+        rows = sb.table("merchant_ratings").select("customer_name,stars,comment").eq("merchant_name", mname).order("id", desc=True).limit(20).execute().data or []
+    except Exception:
+        return
+    rows = [r for r in rows if str(r.get("comment") or "").strip()][:5]
+    if not rows:
+        return
+    with st.expander(f"💬 آراء الزبائن ({len(rows)})"):
+        for r in rows:
+            who = html.escape(str(r.get("customer_name") or "زبون").split()[0])
+            n = max(1, min(5, int(r.get("stars") or 0)))
+            st.markdown(
+                f"<div style='padding:8px 0; border-bottom:1px solid #F1F5F9;'>"
+                f"<b>{who}</b> <span style='color:#F9A825;'>{'★' * n}{'☆' * (5 - n)}</span><br>"
+                f"<span style='font-size:13px; color:#475569;'>{html.escape(str(r.get('comment')))}</span></div>",
+                unsafe_allow_html=True,
+            )
+
+
+def fetch_my_ratings(phone):
+    """{(رقم الطلب, المتجر): عدد النجوم} لتقييمات هذا الزبون."""
+    try:
+        rows = sb.table("merchant_ratings").select("order_id,merchant_name,stars").eq("customer_phone", phone).execute().data or []
+        return {(r.get("order_id"), str(r.get("merchant_name"))): int(r.get("stars") or 0) for r in rows}
+    except Exception:
+        return {}
+
+
+def render_order_rating(ord_item, my_ratings):
+    """بعد التوصيل: يقيّم الزبون كل متجر في الطلب بالنجوم وتعليق اختياري."""
+    oid = ord_item.get("id")
+    names = []
+    for n in re.findall(r"\[المتجر:\s*(.*?)\]", str(ord_item.get("order_details") or "")):
+        n = n.strip()
+        if n and n not in names:
+            names.append(n)
+    if not names:
+        return
+    st.markdown("<div style='font-weight:900; color:#E64A19; margin:10px 0 4px;'>⭐ قيّم تجربتك مع المتجر</div>", unsafe_allow_html=True)
+    for n in names:
+        done = my_ratings.get((oid, n))
+        if done:
+            st.markdown(f"✅ قيّمت **{n}**: " + "⭐" * done)
+            continue
+        k = f"{oid}_{hashlib.md5(n.encode('utf-8')).hexdigest()[:8]}"
+        st.markdown(f"**{n}**")
+        stars = st.radio("تقييمك", [5, 4, 3, 2, 1], format_func=lambda v: "⭐" * v, horizontal=True, key=f"rate_stars_{k}")
+        comment = st.text_input("تعليق (اختياري)", key=f"rate_comment_{k}", placeholder="كيف كانت تجربتك؟")
+        if st.button("إرسال التقييم", key=f"rate_send_{k}"):
+            try:
+                sb.table("merchant_ratings").insert({
+                    "merchant_name": n,
+                    "customer_phone": st.session_state.phone,
+                    "customer_name": st.session_state.customer_name,
+                    "order_id": oid,
+                    "stars": int(stars),
+                    "comment": comment.strip(),
+                }).execute()
+                load_rating_stats.clear()
+                st.success("شكرًا لتقييمك! 🌟")
+                st.rerun()
+            except Exception as e:
+                st.error(f"تعذر حفظ التقييم (تأكد من إنشاء جدول merchant_ratings في Supabase): {e}")
 
 
 # ============================================================
@@ -1263,7 +1395,7 @@ def render_cart(prefix):
 
         payment = st.radio(
             "اختر طريقة الدفع:",
-            ["نقداً عند الاستلام", "CliQ (0797088219)", "Zain Cash"],
+            ["نقداً عند الاستلام", "CliQ (0797088219)", "Samarza - بنك الاتحاد"],
             key=f"pay_{prefix}_mode"
         )
 
@@ -1314,24 +1446,46 @@ def render_home_greeting():
     )
 
 
+HOME_ADS = [
+    # (تدرّج الخلفية، العنوان، النص، الوسم) — عدّل أو أضف إعلاناتك هنا
+    ("linear-gradient(135deg,#FF5722,#FF8A50)", "خصم 10%", "على قيمة أصنافك بكود HALAGO10", "استخدم الكود"),
+    ("linear-gradient(135deg,#0B3D91,#1976D2)", "كوبون ترحيبي", "خصم 1.00 د.أ على أول طلب بكود WELCOME", "جرّب الآن"),
+    ("linear-gradient(135deg,#7B1FA2,#AB47BC)", "توصيل سريع", "متاجر الكرك قريبة منك وجاهزة للتوصيل", "اطلب الآن"),
+    ("linear-gradient(135deg,#2E7D32,#66BB6A)", "ماركت وخضروات", "خضروات وفواكه طازجة لباب بيتك", "تسوّق الآن"),
+    ("linear-gradient(135deg,#AD1457,#EC407A)", "حلويات ومحامص", "أطيب الحلويات والمكسرات من متاجر الكرك", "اكتشف"),
+    ("linear-gradient(135deg,#B71C1C,#EF5350)", "لحوم طازجة", "اختر من لحوم المتاجر القريبة منك", "اطلب الآن"),
+    ("linear-gradient(135deg,#00695C,#26A69A)", "تابع طلبك", "من التجهيز حتى الوصول لحظة بلحظة", "طلباتي"),
+    ("linear-gradient(135deg,#263238,#546E7A)", "ادفع كما تشاء", "كاش أو CliQ أو Samarza بنك الاتحاد", "دفع مرن"),
+]
+
+
 def render_home_offers():
-    st.markdown("<div class='kg-section-title'>🎁 عروض اليوم</div>", unsafe_allow_html=True)
-    _offers = [
-        ("o1", "خصم 10%", "على قيمة أصنافك باستخدام كود HALAGO10", "استخدم الكود"),
-        ("o2", "توصيل سريع", "متاجر الكرك قريبة منك وجاهزة للتوصيل", "اطلب الآن"),
-        ("o3", "كوبون ترحيبي", "خصم 1.00 د.أ على أول طلب بكود WELCOME", "جرّب الآن"),
-    ]
-    _cols = st.columns(3)
-    for _oi, (_cls, _t, _s, _tag) in enumerate(_offers):
-        with _cols[_oi % 3]:
-            st.markdown(
-                f"<div class='kg-offer-card {_cls}'>"
-                f"<div class='kg-offer-title'>{_t}</div>"
-                f"<div class='kg-offer-sub'>{_s}</div>"
-                f"<div class='kg-offer-tag'>{_tag}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+    st.markdown("<div class='kg-section-title'>🎁 عروض وإعلانات</div>", unsafe_allow_html=True)
+    cards = "".join(
+        f"<div class='kg-ad' style='background:{g}'><div class='kg-ad-t'>{t}</div>"
+        f"<div class='kg-ad-s'>{s}</div><div class='kg-ad-tag'>{tag}</div></div>"
+        for g, t, s, tag in HOME_ADS
+    )
+    dur = max(30, len(HOME_ADS) * 6)
+    st.markdown(
+        "<style>"
+        ".kg-ads-wrap{direction:ltr;overflow:hidden;border-radius:18px;margin:4px 0 16px;"
+        "-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);"
+        "mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);}"
+        ".kg-ads-track{display:flex;gap:12px;width:max-content;padding:4px 0;animation:kgAds linear infinite;}"
+        ".kg-ads-wrap:hover .kg-ads-track,.kg-ads-wrap:active .kg-ads-track{animation-play-state:paused;}"
+        "@keyframes kgAds{from{transform:translateX(0)}to{transform:translateX(calc(-50% - 6px))}}"
+        ".kg-ad{flex:0 0 auto;width:250px;min-height:112px;border-radius:16px;padding:14px 16px;direction:rtl;"
+        "text-align:right;display:flex;flex-direction:column;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.12);}"
+        ".kg-ad *{color:#FFFFFF !important;}"
+        ".kg-ad-t{font-size:17px;font-weight:900;}"
+        ".kg-ad-s{font-size:12px;opacity:.92;margin-top:5px;}"
+        ".kg-ad-tag{margin-top:9px;background:rgba(255,255,255,.22);border-radius:20px;padding:3px 10px;"
+        "font-size:11px;font-weight:800;width:fit-content;}"
+        "</style>"
+        f"<div class='kg-ads-wrap'><div class='kg-ads-track' style='animation-duration:{dur}s'>{cards}{cards}</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_store_card(store, key, search_text="", orders=None):
@@ -1343,12 +1497,8 @@ def render_store_card(store, key, search_text="", orders=None):
     badge = html.escape(merchant_badge(store))
     fee_value = store.get("delivery_fee")
     fee_text = f"من {safe_price(fee_value):.2f} د.أ" if fee_value is not None else "حسب الموقع"
-    try:
-        rate = float(store.get("rating") or store.get("avg_rating") or 0)
-    except Exception:
-        rate = 0.0
-    rate = max(0.0, min(5.0, rate))
-    rate_html = (f"<span class='kg-pill kg-pill-rate'>★ {rate:.1f}</span>" if rate > 0
+    rate, rcount = merchant_rating_value(store)
+    rate_html = (f"<span class='kg-pill kg-pill-rate'>★ {rate:.1f}" + (f" ({rcount})" if rcount else "") + "</span>" if rate > 0
                  else "<span class='kg-pill kg-pill-new'>جديد</span>")
     hot_html = f"<span class='kg-pill kg-pill-hot'>🔥 {int(orders)} طلب</span>" if orders else ""
     sub = html.escape(" • ".join(x for x in (scat, sloc) if x))
@@ -1460,6 +1610,7 @@ if st.session_state.nav_tab == "الرئيسية":
 
             # ===== تقييم المتجر (نجوم) =====
             render_rating(m_data)
+            render_store_reviews(mname)
 
             if m_data.get("map_link"):
                 st.markdown(f'<a href="{m_data.get("map_link")}" target="_blank" style="color:#E64A19; font-weight:bold; text-decoration:none; display:inline-block; margin-bottom:15px;">🗺 فتح موقع المتجر على خرائط جوجل</a>', unsafe_allow_html=True)
@@ -1650,6 +1801,7 @@ elif st.session_state.nav_tab == "الطلبات":
 
     try:
         orders = sb.table("orders").select("*").eq("customer_phone", st.session_state.phone).order("id", desc=True).execute().data or []
+        my_ratings = fetch_my_ratings(st.session_state.phone) if orders else {}
         if orders:
             for ord_item in orders:
                 status = ord_item.get('order_status', 'قيد التجهيز')
@@ -1696,6 +1848,9 @@ elif st.session_state.nav_tab == "الطلبات":
 
                 with st.expander("📄 تفاصيل الأصناف المطلوبة"):
                     st.code(ord_item.get('order_details', ''), language=None)
+
+                if status in ("تم التوصيل", "تم الاستلام"):
+                    render_order_rating(ord_item, my_ratings)
 
                 st.markdown("</div>", unsafe_allow_html=True)
         else:
