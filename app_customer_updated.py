@@ -233,6 +233,15 @@ st.set_page_config(
 
 inject_app_icon()
 
+# نسخة مضمنة من أيقونة قلعة الكرك لاستخدامها داخل الواجهة بدون طلب ملف إضافي من المتصفح
+_ICON_URI = ""
+try:
+    if os.path.exists(_ICON_FILE):
+        with open(_ICON_FILE, "rb") as _icon_fp:
+            _ICON_URI = "data:image/png;base64," + base64.b64encode(_icon_fp.read()).decode()
+except Exception:
+    _ICON_URI = ""
+
 cookie_controller = None
 if COOKIE_CONTROLLER_OK:
     try:
@@ -615,6 +624,34 @@ div[class*="st-key-user_search_box_"] input, div[class*="st-key-store_q_input"] 
     border-radius: 26px !important; background: #F6F6F6 !important; border: 1px solid #ECECEC !important;
     padding: 12px 18px !important; font-size: 15px !important;
 }
+
+/* ============ تحسينات بصرية إضافية — تجربة تطبيق توصيل ============ */
+html, body, [data-testid="stAppViewContainer"] { background: #FFF9F5 !important; }
+[data-testid="stAppViewContainer"] { background: linear-gradient(180deg, #FFF8F3 0%, #FFFFFF 42%) !important; }
+.main .block-container { max-width: 1180px !important; }
+.kg-header { position: relative; overflow: hidden; }
+.kg-header::before { content: ""; position:absolute; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,.10); top:-72px; left:-42px; }
+.kg-header::after { content: ""; position:absolute; width:120px; height:120px; border-radius:50%; background:rgba(255,215,0,.12); bottom:-58px; right:8%; }
+.kg-header > * { position: relative; z-index: 1; }
+.kg-home-title { text-shadow: 0 2px 8px rgba(0,0,0,.14); }
+.kg-section-title { display:flex; align-items:center; gap:8px; border-right:4px solid #FF5722; padding-right:10px; }
+.stTextInput > div > div, .stTextArea > div > div, .stSelectbox > div > div { border-radius:14px !important; border-color:#E8DCD4 !important; background:#FFFFFF !important; }
+.stButton > button { transition: transform .15s ease, box-shadow .15s ease !important; }
+.stButton > button:hover { transform: translateY(-1px) !important; box-shadow:0 5px 14px rgba(255,87,34,.18) !important; }
+.kg-sc-name, .kg-cart-title, .kg-greet-title { letter-spacing:-.2px; }
+.kg-cart { position: sticky; top: 12px; }
+.kg-promo { box-shadow:0 4px 14px rgba(180,83,9,.06); }
+@media (max-width: 640px) {
+    .block-container { padding-top:.25rem !important; }
+    .kg-header { border-radius:0 0 24px 24px; padding:18px 15px 22px; }
+    .kg-home-title { font-size:24px; }
+    .kg-home-sub { font-size:12px; }
+    .kg-cart { position:static; }
+    .kg-sc-name { font-size:15px; }
+    .kg-sc-meta { gap:4px; }
+    .kg-sc-meta span { font-size:10px; }
+    .stButton > button { min-height:40px !important; }
+}
 </style>
 """,
     unsafe_allow_html=True
@@ -627,12 +664,14 @@ div[class*="st-key-user_search_box_"] input, div[class*="st-key-store_q_input"] 
 if not st.session_state.get("splash_done"):
     _splash = st.empty()
     _splash.markdown(
-        """
+        f"""
         <div style="position:fixed; inset:0; z-index:999999; display:flex; flex-direction:column;
                     align-items:center; justify-content:center; text-align:center;
                     background:linear-gradient(135deg,#E94B10 0%,#FF7A21 100%);">
-            <div style="font-size:84px; animation:kgfade .8s ease both;">🛒</div>
-            <div style="font-size:44px; font-weight:900; color:#FFD700 !important; animation:kgfade 1s ease both; letter-spacing:1px;">Halago</div>
+            <div style="width:108px; height:108px; border-radius:30px; padding:12px; background:#FFFFFF; box-shadow:0 12px 30px rgba(0,0,0,.18); animation:kgfade .8s ease both;">
+                {_ICON_URI and f'<img src="{_ICON_URI}" style="width:100%;height:100%;object-fit:contain;border-radius:22px;">' or '<div style="font-size:78px;line-height:82px;">🛒</div>'}
+            </div>
+            <div style="font-size:44px; font-weight:900; color:#FFD700 !important; animation:kgfade 1s ease both; letter-spacing:1px; margin-top:14px;">Halago</div>
             <div style="font-size:15px; color:#FFFFFF !important; opacity:.9; margin-top:6px;">هلا بك... اطلب براحة</div>
             <div style="font-size:15px; color:#FFD700 !important; opacity:.95; margin-top:14px;">اطلب ما تريد من متاجر الكرك بكل سهولة</div>
             <div style="margin-top:28px; width:34px; height:34px; border:4px solid rgba(255,215,0,.35);
@@ -641,7 +680,7 @@ if not st.session_state.get("splash_done"):
         """,
         unsafe_allow_html=True,
     )
-    time.sleep(3)
+    time.sleep(1.5)
     _splash.empty()
     st.session_state["splash_done"] = True
 
@@ -1574,7 +1613,7 @@ if st.session_state.nav_tab == "الرئيسية":
         f"""
         <div class="kg-header">
             <div class="kg-location">📍 التوصيل إلى <b>{html.escape(str(st.session_state.customer_address or 'عنوانك'))}</b>　⌄</div>
-            <div class="kg-home-title">🛒 Halago</div>
+            <div class="kg-home-title">{(f'<img src="{_ICON_URI}" style="width:34px;height:34px;vertical-align:middle;border-radius:10px;background:#FFFFFF;padding:3px;margin-left:6px;">' if _ICON_URI else '🛒')} Halago</div>
             <div class="kg-home-sub">كل ما تحتاجه من متاجر الكرك في مكان واحد</div>
         </div>
         """,
