@@ -116,10 +116,7 @@ def inject_app_icon(app_title="Halago"):
     except Exception:
         pass
 st.set_page_config(
-    page_title="لوحة إدارة Halago - Admin Panel",
-    page_icon="⚙",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+   page_icon=_PAGE_ICON, 
 )
 
 
