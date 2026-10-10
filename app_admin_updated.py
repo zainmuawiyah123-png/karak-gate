@@ -116,8 +116,14 @@ def inject_app_icon(app_title="Halago"):
     except Exception:
         pass
 st.set_page_config(
-   page_icon=_PAGE_ICON, 
+    page_title="لوحة إدارة Halago - Admin Panel",
+    page_icon=_PAGE_ICON,
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
+
+# تفعيل أيقونة kark.png في تبويب المتصفح وعند إضافة التطبيق للشاشة الرئيسية
+inject_app_icon("Halago")
 
 
 # ============================================================
