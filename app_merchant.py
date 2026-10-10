@@ -1,4 +1,5 @@
 import re
+import os
 import base64  # noqa: F401  (يُستخدم عند عرض الصور القديمة المخزنة كنص)
 
 import streamlit as st
@@ -43,7 +44,45 @@ COMMISSION = 0.10
 PAGE = 15
 CATEGORIES = ["مطاعم", "حلويات", "ماركت", "محامص ومكسرات", "خضروات وفواكه", "لحوم", "صيدليات ومستلزمات طبيه"]
 
-st.set_page_config(page_title="بوابة المتاجر - Halago", page_icon="🔔", layout="wide")
+# أيقونة قلعة الكرك لتبويب المتصفح والشاشة الرئيسية
+_ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kark.png")
+_PAGE_ICON = "🔔"
+try:
+    from PIL import Image as _PILImage
+    if os.path.exists(_ICON_FILE):
+        _PAGE_ICON = _PILImage.open(_ICON_FILE)
+except Exception:
+    _PAGE_ICON = "🔔"
+
+
+def inject_app_icon(app_title="Halago"):
+    """إضافة أيقونة kark.png لتبويب المتصفح وعند إضافة التطبيق للشاشة الرئيسية."""
+    try:
+        if not os.path.exists(_ICON_FILE):
+            return
+        import streamlit.components.v1 as components
+        with open(_ICON_FILE, "rb") as f:
+            uri = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+        js = """<script>
+        (function(){
+          try {
+            var d = window.parent.document, h = d.head, uri = "__URI__";
+            h.querySelectorAll('link[rel*="icon"]').forEach(function(l){ l.remove(); });
+            [["apple-touch-icon","180x180"],["icon","180x180"]].forEach(function(p){
+              var l = d.createElement('link'); l.rel = p[0]; l.sizes = p[1]; l.type = 'image/png'; l.href = uri; h.appendChild(l);
+            });
+            function meta(n, c){ var m = d.querySelector('meta[name="'+n+'"]') || d.createElement('meta'); m.name = n; m.content = c; h.appendChild(m); }
+            meta('apple-mobile-web-app-title', "__TITLE__");
+            meta('apple-mobile-web-app-capable', 'yes');
+          } catch(e) {}
+        })();
+        </script>"""
+        components.html(js.replace("__URI__", uri).replace("__TITLE__", app_title), height=0)
+    except Exception:
+        pass
+
+st.set_page_config(page_title="بوابة المتاجر - Halago", page_icon=_PAGE_ICON, layout="wide")
+inject_app_icon("Halago")
 
 st.markdown(
     """
