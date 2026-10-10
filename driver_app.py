@@ -1,6 +1,8 @@
 """بوابة السائقين (Streamlit + Supabase): دخول بـ PIN، طلباتي، خريطة ومسافة وأجرة، جرس تنبيه، وإشعار الإدارة عند التسليم/استلام النقد."""
 import html
 import urllib.parse
+import os
+import base64
 
 import streamlit as st
 
@@ -15,7 +17,45 @@ try:
 except Exception:
     PUSH_IMPORT_OK = False
 
-st.set_page_config(page_title="بوابة السائقين - Halago", page_icon="🛵", layout="wide")
+# أيقونة الكرك لتبويب المتصفح والشاشة الرئيسية
+_ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kark.png")
+_PAGE_ICON = "🛵"
+try:
+    from PIL import Image as _PILImage
+    if os.path.exists(_ICON_FILE):
+        _PAGE_ICON = _PILImage.open(_ICON_FILE)
+except Exception:
+    _PAGE_ICON = "🛵"
+
+
+def inject_app_icon(app_title="Halago"):
+    """إضافة أيقونة kark.png لتبويب المتصفح وعند إضافة التطبيق للشاشة الرئيسية."""
+    try:
+        if not os.path.exists(_ICON_FILE):
+            return
+        import streamlit.components.v1 as components
+        with open(_ICON_FILE, "rb") as f:
+            uri = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+        js = """<script>
+        (function(){
+          try {
+            var d = window.parent.document, h = d.head, uri = "__URI__";
+            h.querySelectorAll('link[rel*="icon"]').forEach(function(l){ l.remove(); });
+            [["apple-touch-icon","180x180"],["icon","180x180"]].forEach(function(p){
+              var l = d.createElement('link'); l.rel = p[0]; l.sizes = p[1]; l.type = 'image/png'; l.href = uri; h.appendChild(l);
+            });
+            function meta(n, c){ var m = d.querySelector('meta[name="'+n+'"]') || d.createElement('meta'); m.name = n; m.content = c; h.appendChild(m); }
+            meta('apple-mobile-web-app-title', "__TITLE__");
+            meta('apple-mobile-web-app-capable', 'yes');
+          } catch(e) {}
+        })();
+        </script>"""
+        components.html(js.replace("__URI__", uri).replace("__TITLE__", app_title), height=0)
+    except Exception:
+        pass
+
+st.set_page_config(page_title="بوابة السائقين - Halago", page_icon=_PAGE_ICON, layout="wide")
+inject_app_icon("Halago")
 
 st.markdown(
     """
