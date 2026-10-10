@@ -980,34 +980,153 @@ with tab_offers:
 # 7. التقرير المالي
 # ============================================================
 with tab_finance:
-    st.subheader("📊 التقرير المالي الشامل")
+    st.subheader("📊 كشف الحساب ومستحقات التجار")
+    st.caption("يعرض هذا الكشف قيمة أصناف كل تاجر، عمولة المنصة، وصافي المبلغ المستحق له. أجور التوصيل تخص التوصيل ولا تدخل ضمن مستحقات التاجر.")
     try:
-        orders = sb.table("orders").select("total_amount, created_at, order_details").execute().data or []
-        total_sales = sum(float(o.get("total_amount") or 0) for o in orders)
-        total_orders_count = len(orders)
+        try:
+            orders = sb.table("orders").select(
+                "id, total_amount, created_at, order_details, order_status, driver_fee"
+            ).order("id", desc=True).execute().data or []
+        except Exception:
+            # توافق مع قواعد البيانات القديمة التي لا تحتوي على driver_fee.
+            orders = sb.table("orders").select(
+                "id, total_amount, created_at, order_details, order_status"
+            ).order("id", desc=True).execute().data or []
+
+        MERCHANT_COMMISSION = 0.10
+        merchant_rows = {}
+        order_detail_rows = []
+        item_pattern = re.compile(
+            r"^\s*-\s*(.*?)\s+×\s*(\d+)\s+\(([\d.]+)\s*د\.أ\)\s*\[المتجر:\s*(.*?)\]\s*$"
+        )
+
         def order_delivery_fee(o):
-            # الأجرة المسجلة داخل تفاصيل الطلب، وللطلبات القديمة الأجرة الافتراضية 1.50
-            m = re.search(r"التوصيل:\s*([\d.]+)", str(o.get("order_details") or ""))
-            return float(m.group(1)) if m else 1.50
+            match = re.search(r"التوصيل:\s*([\d.]+)", str(o.get("order_details") or ""))
+            return float(match.group(1)) if match else 1.50
 
-        estimated_delivery_revenue = sum(order_delivery_fee(o) for o in orders)
-        estimated_service_revenue = total_orders_count * 0.25
+        def add_merchant(name, amount, order_id, created_at, status):
+            name = str(name or "غير محدد").strip() or "غير محدد"
+            amount = float(amount or 0)
+            row = merchant_rows.setdefault(name, {
+                "اسم التاجر": name,
+                "عدد الطلبات": 0,
+                "إجمالي قيمة الأصناف (د.أ)": 0.0,
+                "عمولة المنصة 10% (د.أ)": 0.0,
+                "صافي المبلغ المستحق للتاجر (د.أ)": 0.0,
+            })
+            # يُحسب الطلب مرة واحدة لكل تاجر، حتى لو احتوى على عدة أصناف.
+            order_key = (name, str(order_id))
+            if order_key not in seen_merchant_orders:
+                row["عدد الطلبات"] += 1
+                seen_merchant_orders.add(order_key)
+            commission = round(amount * MERCHANT_COMMISSION, 2)
+            row["إجمالي قيمة الأصناف (د.أ)"] += amount
+            row["عمولة المنصة 10% (د.أ)"] += commission
+            row["صافي المبلغ المستحق للتاجر (د.أ)"] += amount - commission
+            order_detail_rows.append({
+                "رقم الطلب": order_id,
+                "التاريخ": created_at,
+                "اسم التاجر": name,
+                "قيمة الأصناف (د.أ)": round(amount, 2),
+                "العمولة (د.أ)": commission,
+                "المستحق للتاجر (د.أ)": round(amount - commission, 2),
+                "حالة الطلب": status or "-",
+            })
 
-        col1, col2, col3 = st.columns(3)
+        seen_merchant_orders = set()
+        total_sales = 0.0
+        total_delivery = 0.0
+        total_platform_commission = 0.0
+
+        for order in orders:
+            total_sales += float(order.get("total_amount") or 0)
+            total_delivery += order_delivery_fee(order)
+            details = str(order.get("order_details") or "")
+            parsed_any = False
+            for line in details.splitlines():
+                match = item_pattern.match(line)
+                if not match:
+                    continue
+                parsed_any = True
+                item_name, qty, line_amount, merchant_name = match.groups()
+                add_merchant(
+                    merchant_name,
+                    float(line_amount),
+                    order.get("id"),
+                    order.get("created_at"),
+                    order.get("order_status"),
+                )
+
+            # للطلبات القديمة التي لا تحتوي على اسم تاجر في تفاصيل الأصناف.
+            if not parsed_any:
+                merchant_name = "طلبات قديمة — تحتاج مراجعة"
+                fallback_total = max(0.0, float(order.get("total_amount") or 0) - order_delivery_fee(order) - 0.25)
+                add_merchant(
+                    merchant_name,
+                    fallback_total,
+                    order.get("id"),
+                    order.get("created_at"),
+                    order.get("order_status"),
+                )
+
+        for row in merchant_rows.values():
+            for key in ("إجمالي قيمة الأصناف (د.أ)", "عمولة المنصة 10% (د.أ)", "صافي المبلغ المستحق للتاجر (د.أ)"):
+                row[key] = round(row[key], 2)
+            total_platform_commission += row["عمولة المنصة 10% (د.أ)"]
+
+        total_due = sum(row["صافي المبلغ المستحق للتاجر (د.أ)"] for row in merchant_rows.values())
+        service_revenue = len(orders) * 0.25
+
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("إجمالي قيمة الطلبات", f"{total_sales:.2f} د.أ")
+            st.metric("مبيعات الأصناف", f"{sum(r['إجمالي قيمة الأصناف (د.أ)'] for r in merchant_rows.values()):.2f} د.أ")
         with col2:
-            st.metric("أرباح التوصيل المتوقعة", f"{estimated_delivery_revenue:.2f} د.أ")
+            st.metric("مستحقات التجار", f"{total_due:.2f} د.أ")
         with col3:
-            st.metric("أرباح خدمات التطبيق", f"{estimated_service_revenue:.2f} د.أ")
+            st.metric("عمولة المنصة", f"{total_platform_commission:.2f} د.أ")
+        with col4:
+            st.metric("أجور التوصيل", f"{total_delivery:.2f} د.أ")
 
-        st.markdown("---")
-        st.write("📈 **تفاصيل العمليات المالية المسجلة:**")
-        if orders:
-            for o in orders:
-                st.write(f"- مبلغ الطلب: **{o.get('total_amount')} د.أ** | التاريخ: {o.get('created_at')}")
+        st.markdown("### 🧾 مستحقات كل تاجر")
+        if merchant_rows:
+            summary_rows = list(merchant_rows.values())
+            st.dataframe(
+                summary_rows,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "إجمالي قيمة الأصناف (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                    "عمولة المنصة 10% (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                    "صافي المبلغ المستحق للتاجر (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                },
+            )
+            st.success(f"💰 إجمالي المبلغ المطلوب دفعه للتجار: {total_due:.2f} د.أ")
         else:
-            st.info("لا توجد بيانات مالية كافية بعد.")
+            st.info("لا توجد طلبات تحتوي على أصناف مسجلة بعد.")
+
+        st.markdown("### 📋 تفاصيل المستحقات حسب الطلب")
+        if order_detail_rows:
+            st.dataframe(
+                order_detail_rows,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "قيمة الأصناف (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                    "العمولة (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                    "المستحق للتاجر (د.أ)": st.column_config.NumberColumn(format="%.2f د.أ"),
+                },
+            )
+
+        with st.expander("ℹ️ طريقة الحساب"):
+            st.markdown(
+                f"""
+                - عمولة المنصة الحالية: **{MERCHANT_COMMISSION * 100:.0f}%** من قيمة أصناف التاجر.
+                - مستحق التاجر = قيمة أصناف التاجر − عمولة المنصة.
+                - أجور التوصيل وخدمة التطبيق لا تُضاف إلى مستحق التاجر.
+                - إجمالي رسوم خدمة التطبيق التقديرية: **{service_revenue:.2f} د.أ**.
+                - الطلبات القديمة التي لا تحتوي اسم التاجر تظهر في قسم **طلبات قديمة — تحتاج مراجعة**.
+                """
+            )
     except Exception as e:
         st.error(f"تعذر استخراج التقرير المالي: {e}")
 
