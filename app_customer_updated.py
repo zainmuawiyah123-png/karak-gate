@@ -54,7 +54,7 @@ except Exception:
 try:
     from fees import DEFAULT_PER_KM, DEFAULT_BASE_FEE
 except Exception:
-    DEFAULT_PER_KM, DEFAULT_BASE_FEE = 0.25, 1.50
+    DEFAULT_PER_KM, DEFAULT_BASE_FEE = 0.35, 1.50
 
 try:
     from push_service import send_push
