@@ -1,7 +1,7 @@
 """أجرة التوصيل - متوافقة مع تطبيقك: الأجرة الأساسية delivery_fee + fee_per_km لكل كم (في جدول merchants)."""
 import re
 
-DEFAULT_PER_KM = 0.25   # دينار لكل كم عندما لا تحدد الإدارة سعرًا خاصًا للمتجر (fee_per_km فارغ)
+DEFAULT_PER_KM = 0.35   # دينار لكل كم عندما لا تحدد الإدارة سعرًا خاصًا للمتجر (fee_per_km فارغ)
 DEFAULT_BASE_FEE = 1.50
 
 
